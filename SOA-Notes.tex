@@ -12,7 +12,7 @@
 
 \section{Slide \textit{'hardware-insights'}}
 
-\section{OOO Pipeline execution and imprecise exceptions}
+\subsection{OOO Pipeline execution and imprecise exceptions}
 
 When processor executes instructions in an order governed by the availability of input data and execution units, rather than by their original order in a program, we are adopting an \textbf{out-of-order execution paradigm}; \textbf{in other words different instructions can surpass each other depending on data or micro-controller availability.} We distinguish two events when we use this kind of paradigm: the \textbf{emission}, that is the action of injecting instructions into the pipeline; the \textbf{retire}, that is the action of committing instructions and making their side effects visible in terms of ISA exposed architectural resources
 
@@ -25,7 +25,7 @@ When processor executes instructions in an order governed by the availability of
 
 \textbf{Recall that any instruction may change the micro-architectural state, although finally not committing its actions onto ISA exposed resources.} Since the the pipeline may have not yet completed the execution of instructions preceding the offending one, hardware status can been already changed an this fact can be exploited by several attacks (like \textbf{Meltdown}).
 
-\section{Tomasulo algorithm}
+\subsection{Tomasulo algorithm}
 
 Tomasulo’s algorithm is a computer architecture hardware algorithm for dynamic scheduling of instructions that allows out-of-order execution and enables more efficient use of multiple execution units. Suppose two operation A and B such that A precedes B in program order, that algorithm permit to resolve three hazard:
 
@@ -54,7 +54,7 @@ The key disadvantages for that architecture is that communicating data between p
 
 The DSM multiprocessors are also called \textbf{NUMAs} (\textit{non-uniform memory access}), \textbf{since the access time depends on the location of a data word in memory.} In fact, when a CPU wants to access to an item stored into his node, performing a \textit{local access} involving inner private/shared caches and controllers, access latency is very low. However when a CPU wants to access to an item stored on another node, performing a \textit{remote accesses} involving remote controllers and caches, latency can be very high respect to previous case.
 
-\section{The problem of cache coherence}
+\subsection{The problem of cache coherence}
 
 Unfortunately, \textbf{the view of memory held by different processors is through their individual caches}, which, without any additional precautions, could end up seeing different values of a same shared data (\textbf{cache coherence} problem).
 
@@ -79,7 +79,7 @@ The choice and the design of a coherence protocol depends on many factors includ
 
 \end{description}
 
-\section{Snooping protocol}
+\subsection{Snooping protocol}
 
 The key to implementing an invalidate protocol is the use of the bus, or another broadcast medium, called \textit{network} to perform invalidates and to issue "transactions" on the state of cache blocks.
 
@@ -232,6 +232,21 @@ As a general rule,\textbf{ any process switch implies changing the set of active
 Besides \textbf{process switches}, there are other cases in which the kernel needs to flush some entries in a TLB. For instance, when the kernel assigns a page frame to a User Mode process and stores its physical address into a Page Table entry, it must flush any local TLB entry that refers to the corresponding linear address (virtual addresses accessible \textbf{locally} in time-sharing concurrency). On multiprocessor systems, the kernel also must flush the same TLB entry on the CPUs that are using the same set of page tables, if any (virtual addresses accessible \textbf{globally}  by every CPU/core in real-time-concurrency).
 
 Kernel-page mapping has a \textit{global} nature, therefore when we use \texttt{vmalloc()} / \texttt{vfree()} on a specific CPU, all the other must observer mapping updates and TLB flush is necessary. 
+
+\newpage
+\section{Slide \textit{'kernel-level-task-management'}}
+
+On the x86 architecture, the kernel must explicitly interact with several kinds of clock circuits which are used both to keep track of the current time of day and to make precise time measurements. \textbf{The timer circuits are programmed by the kernel, so that they issue interrupts at a fixed, predefined frequency; such periodic interrupts are crucial for implementing the software timers used by the kernel and the user programs}. 
+
+\begin{description}
+\item[Time Stamp Counter (TSC)] It is a counter accessible through the 64-bit \textit{Time Stamp Counter} (\textbf{TSC}) register, which can be read using \texttt{rdtsc} assembly language instruction. \textbf{It represents a counter that is increased at each clock signal.} It is used by Linux to determine the clock signal frequency while initializing the system; that task is accomplished using \texttt{calibrate\_tsc()}.
+\item[High Precision Event Timer (HPET)] The HPET represents a very powerful chip which provides up to \textbf{eight 32-bit or 64-bit independent counters exploitable by kernel}. Each counter is driven by its own clock signal, whose frequency must be at least 10 MHz and, therefore, the counter is increased at least once in \textbf{100 nanoseconds}. Any counter is associated with at most 32 timers, each of which is composed by a \textit{comparator} and a \textit{match register}. \textbf{The comparator is a circuit that checks the value in the counter against the value in the match register, and raises a hardware interrupt if a match is found. Some of the timers can be enabled to generate a periodic interrupt.}
+\item[LAPIC] The Local APIC Timer (LAPIC-T) represents another time-measuring device. This timer has a counter of \textbf{32 bits long} used to store the number of of ticks that must elapse before the interrupt is issued; therefore, the local timer can be programmed to issue interrupts at very low frequencies. \textbf{Observe that local APIC timer sends an interrupt only to its processor}. The APIC’s timer is based on the bus clock signal and can be can be programmed in such a way to decrease the timer counter every 1, 2, 4, 8, 16, 32, 64, or 128 bus clock signals.
+
+\end{description}
+
+
+
 
 \section{Part 1}
 
