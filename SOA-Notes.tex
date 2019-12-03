@@ -1,4 +1,9 @@
 \documentclass[10pt,a4paper]{article}
+
+
+\usepackage[a4paper, total={8in, 10in}]{geometry}
+
+
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath}
 \usepackage{amsfonts}
@@ -7,29 +12,107 @@
 
 \section{Slide \textit{'kernel-level-memory-management'}}
 
+\subsection{Page Descriptor}
+
+In Linux, \textbf{state information of a page frame is kept in a page descriptor} of type \texttt{struct page} (or struct \texttt{mem\_map\_t}), and all page descriptors, which are 32 byte long, are stored in an array called \texttt{mem\_map} (the space required by it is slightly less than 1\% of the whole RAM). These data structures are defined into \texttt{include/linux/mm.h}. 
+
+The \texttt{virt\_to\_page(addr)} macro yields the address of the page descriptor associated with the linear address \texttt{addr}. 
+
+\texttt{struct page} has many fields but the most important are:
+\begin{description}
+
+\item[\texttt{atomic\_t \_count}] It represent a usage reference counter for the page. If it is set to -1, the corresponding page frame is free and can be assigned to any process or to the kernel itself. If it is set to a value greater than or equal to 0, the page frame is assigned to one or more processes or is used to store some kernel data structures. The \texttt{page\_count()} function returns the value of the \texttt{\_count} field increased by one, that is, the number of users of the page. This field is managed via atomic updates, such as with \texttt{LOCK} directives.
+\item[\texttt{struct list\_head lru}] Contains pointers to the least recently used doubly linked list of pages. 
+\item[\texttt{unsigned long flags}] Array of flags used to describe the status of current page frame (but also encodes the zone number to which the page frame belongs). There are up to 32 flags and Linux kernel defines many macros to manipulate them. Some flags are:
+\begin{description}
+\item[\texttt{PG\_locked}] The page is locked; for instance, it is involved in a disk I/O operation.
+\item[\texttt{PG\_dirty}] The page has been modified.
+\item[\texttt{PG\_reserved}] The page frame is reserved for kernel code or is unusable.
+\end{description}
+
+\end{description}
+
+\subsection{Free list}
+
+Linux uses \textbf{free list} to manage memory allocation. \textbf{It operates by connecting unallocated regions of memory together in a linked list, using the first word of each unallocated region as a pointer to the next.} 
+
+Free lists make the allocation and deallocation operations very simple. \textbf{To free a region, one would just link it to the free list. To allocate a region, one would simply remove a single region from the end of the free list and use it}. 
+
 \subsection{NUMA}
 
-Linux 2.6 supports the \textit{Non-Uniform Memory Access} (\textbf{NUMA}) model, \textbf{in which the access times for different memory locations from a given CPU may vary}. According to that architecture,  physical memory is partitioned in several \textbf{nodes}.
+Is extremely important to remember that Linux 2.6 supports the \textit{Non-Uniform Memory Access} (\textbf{NUMA}) model, \textbf{in which the access times for different memory locations from a given CPU may vary} and, according to that architecture, physical memory is partitioned in several \textbf{nodes}. The time needed by a given CPU to access pages within a single node is the same. However, this time might not be the same for two different CPUs. 
 
-To represent and manage a NUMA nodes, Linux uses a singly linked list of NUMA node descriptors of type \texttt{pg\_data\_t}, whose first element is pointed to by the \texttt{pgdat\_list} variable. 
+\subsection{NUMA Node Descriptor}
 
-Be careful to the fact that this data structure is used by Linux kernel even if the architecture is based on \textit{Uniform Memory Access} (\textbf{UMA}): in fact Linux makes use of a single node that includes all system physical memory. Thus, the \texttt{pgdat\_list} variable points to a list consisting of a single element (node 0) stored in the \texttt{contig\_page\_data} variable.
+\textbf{Be careful that Linux splits physical memory inside each node into several zones. We have 3 free lists of frames, depending on the frame positioning within available zones (defined in \texttt{include/linux/mmzone.h}) which are:}
 
-A node descriptor has several fields, the most important of them is:
-\begin{description}
-\item[\texttt{struct page *node\_mem\_map}] Array of page descriptors of the node
-\end{description}
-
-However \textbf{Linux 2.6 partitions the physical memory of every memory node into three zones} which are:
 \begin{description}
 \item[\texttt{ZONE\_DMA}] Contains page frames of memory below 16 MB, that is page frames that can be used by old ISA-based devices (\textit{Direct Memory Access} (DMA) processors).
-\item[\texttt{ZONE\_NORNMAL}] Contains page frames of memory at and above 16 MB and below 896 MB.
-\item[\texttt{ZONE\_HIGHMEM}] Contains page frames of memory at and above 896 MB
+\item[\texttt{ZONE\_NORNMAL}] Contains page frames of memory at and above 16 MB and below 896 MB (direct mapped by the kernel).
+\item[\texttt{ZONE\_HIGHMEM}] Contains page frames of memory at and above 896 MB (only page cache and user).
 \end{description}
 
-The \texttt{ZONE\_DMA} and \texttt{ZONE\_NORNMAL} zones include page frames that can be directly accessed by the kernel. The \texttt{ZONE\_HIGHMEM} zone is always empty on 64-bit architectures.
+To represent a NUMA node, Linux uses a descriptor of type \texttt{struct pg\_data\_t}. All node descriptors are stored in a singly linked list, whose first
+element is pointed to by the \texttt{pgdat\_list} variable. Be careful to the fact that this data structure is used by Linux kernel even if the architecture is based on \textit{Uniform Memory Access} (\textbf{UMA}): in fact Linux makes use of a single node that includes all system physical memory. Thus, the \texttt{pgdat\_list} variable points to a list consisting of a single element (node 0) stored in the \texttt{contig\_page\_data} variable.
 
+Remember that free lists information is kept within the \texttt{struct pg\_data\_t} data structure. In fact the most important fields of \texttt{struct pg\_data\_t} are:
 
+\begin{description}
+\item[\texttt{struct page *node\_mem\_map}] Array of page descriptors of the node
+\item[\texttt{struct zone [] node\_zones}] Array of zone descriptors of the node
+\end{description}
+
+\subsection{Zone Descriptor}
+
+Obliviously each memory zone has its own descriptor of type \texttt{struct zone} and many fields of this data structure are used for page frame reclaiming. However, most important fields are:
+
+\begin{description}
+\item[\texttt{struct page * zone\_mem\_map}] Pointer to first page descriptor of the zone.
+\item[\texttt{spinlock\_t lock}] Spin lock protecting the descriptor.
+\item[\texttt{struct free\_area [] free\_area}] Identifies the blocks of free page frames in the zone
+\end{description}
+
+In summary, Linux has links to the memory node and to the zone inside the node that includes the corresponding page frame of type \texttt{struct page}.
+
+\subsection{Buddy allocator}
+
+The technique adopted by Linux to solve the external fragmentation problem is based on the well-known \textbf{buddy system} algorithm. All free page frames are grouped into 11 lists of blocks that contain groups of 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, and 1024 contiguous page frames, respectively. The largest request of 1024 page frames corresponds to a chunk of 4 MB of contiguous RAM. We use the term \texttt{order} \textbf{to indicate the logarithmic size of a block}.
+
+Assume there is a request for a group of 256 contiguous page frames (i.e., one megabyte). The algorithm checks first to see whether a free block in the 256-page-frame list exists. If there is no such block, the algorithm looks for the next larger block — a free block in the 512-page-frame list. If such a block exists, the kernel allocates 256 of the 512 page frames to satisfy the request and inserts the remaining 256 page frames into the list of free 256-page-frame blocks. If there is no free 512-page block, the kernel then looks for the next larger block (i.e., a free 1024-page-frame block). If
+such a block exists, it allocates 256 of the 1024 page frames to satisfy the request, inserts the first 512 of the remaining 768 page frames into the list of free 512-page-frame blocks, and inserts the last 256 page frames into the list of free 256-page-frame blocks. If the list of 1024-page-frame blocks is empty, the algorithm gives up and signals an error condition.
+
+\textbf{Linux 2.6 uses a different buddy system for each zone}. Thus, in the x86 architecture, there are \textbf{3 buddy systems}: the first handles the page frames suitable for ISA DMA, the second handles the "normal" page frames, and the third handles the high memory page frames. Each buddy system relies on the following main data structures:
+\begin{itemize}
+\item \textbf{The \texttt{mem\_map} array where all page descriptors are stored}. Actually, each zone is concerned with a subset of the \texttt{mem\_map} elements. The first element in the subset and its number of elements are specified, respectively, by the \texttt{zone\_mem\_map} and \texttt{size} fields of the zone descriptor.
+
+\item The array consisting of eleven elements of type \texttt{struct free\_area}, one element for each group size. As we said the array is stored in the \texttt{free\_area} field of the zone descriptor.
+\end{itemize}
+
+Let us consider the $k^{th}$ element of the \texttt{struct free\_area} array in the zone descriptor, which identifies all the free blocks of size $2^k$. In this data structure there is a pointer of type struct \texttt{list\_head}  which is is the head of a doubly linked circular list that collects the page descriptors associated with the free blocks of $2^k$ pages. Besides the head of the list, the $k^{th}$ element of the \texttt{struct free\_area} array includes also the field \texttt{nr\_free}, which specifies the number of free blocks of size $2^k$ pages, and a pointer to a bitmap that keeps fragmentation information.  
+
+Recall that spin locks are used to manage \texttt{mem\_map} AND \texttt{struct free\_area} array.
+
+\textbf{To achieve better performance a little number of page frames are kept in cache to quickly satisfy the allocation requests for single page frames}.
+
+\subsection{API}
+
+Page frames can be requested by using some different functions and macros (APIs) (they return \texttt{NULL} in case of failure, a linear address of the first allocated page in case of success) which prototype are stored into \texttt{\#include <linux/malloc.h>}. The most important are:
+
+\begin{description}
+\item[\texttt{get\_zeroed\_page(gfp\_mask)}] Function used to obtain a page frame filled with zeros.
+\item[\texttt{\_\_get\_free\_page(gfp\_mask)}] Macro used to get a single page frame.
+\item[\texttt{\_\_get\_free\_pages(gfp\_mask, order)}] Macro used to request $2^{order}$ contiguous page frames returning the linear address of the
+first allocated page.
+\item[\texttt{free\_page(addr)}] This macro releases the page frame having the linear address \texttt{addr}.
+
+The parameter \texttt{gfp\_mask} is a group of flags that specify \textbf{how to look for free page frames} and they are extremely important when we require page frame allocation in different contexts including: 
+\begin{description}
+\item[Interrupt context] allocation is requested by an \textbf{interrupt handler} which uses above function with \texttt{GFP\_ATOMIC} flag (equivalent to \texttt{\_\_GFP\_HIGH}) \textbf{which means that the kernel is allowed to access the pool of reserved page frames: therefore the call cannot lead to sleep (that is no wait)}  An atomic request never blocks: if there are not enough free pages the allocation simply fails.
+
+\item[Process context] allocation is caused by a system call using \texttt{GFP\_KERNEL} or \texttt{GFP\_USER} (both equivalent to \texttt{\_\_GFP\_WAIT | \_\_GFP\_IO | \_\_GFP\_FS}) according to which kernel is allowed to block the current process waiting for free page frames (\texttt{\_\_GFP\_WAIT}) and to perform I/O transfers on low memory pages in order to free page frames (\texttt{\_\_GFP\_IO}): therefore the call can lead to sleep.
+\end{description}
+
+\end{description}
 
 
 \section{Part 1}
