@@ -32,8 +32,38 @@ The DSM multiprocessors are also called \textbf{NUMAs} (\textit{non-uniform memo
 
 Unfortunately, \textbf{the view of memory held by different processors is through their individual caches}, which, without any additional precautions, could end up seeing different values of a same shared data (\textbf{cache coherence} problem).
 
-By definition, \textbf{coherence defines what values can be returned by a read} while \textbf{consistency determines when a written value will be returned by a read}.
+By definition, \textbf{coherence defines what values can be returned by a read} (a \textbf{cache coherence protocols} defines how to maintain coherence) while \textbf{consistency determines when a written value will be returned by a read} (a \textbf{memory consistency protocol} defines when written value must be seen by a reader).
 
+A memory system is coherent if:
+\begin{enumerate}
+\item A read from location $X$, previously written by a processor, returns the last written value if no other processor carried out writes on $X$ in the meanwhile. \textbf{This property preserve program order that is the causal consistency along program order.}
+
+\item A read by a processor to location $X$ that follows a write by another processor to $X$ returns the written value if the read and write are sufficiently separated in time and no other writes to $X$ occur between the two accesses. \textbf{This property assure that a processor couldn't continuously
+read an old data value (Avoidance of staleness).}
+
+\item \textbf{Writes to the same location are serialized}; that is, two writes to the same location by any two processors are seen in the same order by all processors.
+\end{enumerate}
+
+The choice and the design of a coherence protocol depends on many factors including: overhead, latency, cache policies, interconnection topology and so on.
+\textbf{However the Key to implementing a cache coherence protocol is tracking the state of any copy of a data block}. There are two classes of protocol which define when update aforementioned copies:
+\begin{description}
+\item[Update protocol] When we use this type of protocol, also called \textit{write update} or \textit{write broadcast}, when a core writes to a block, it updates all other copies (\textbf{it consumes considerably more bandwidth}).
+
+\item[Invalidate protocol] When we use this type of protocol, a processor has \textbf{exclusive access} to a data item before it writes that item; moreover that CPU invalidates other copies on a write that is no other readable or writeable copies of an item exist when the write occurs. \textbf{It is the most common protocol, but suffer of some latency.}
+
+\end{description}
+
+\section{Snooping protocol}
+
+The key to implementing an invalidate protocol is the use of the bus, or another broadcast medium, called \textit{network} to perform invalidates and to issue "transactions" on the state of cache blocks.
+
+To perform any operation, the processor simply \textbf{acquires} bus access and broadcasts the address to be invalidated on the bus. All processors continuously \textbf{snoop} on the bus, watching the addresses. The processors check whether the address on the bus is in their cache. If so, the corresponding data in the cache are invalidated. \textbf{A state transition cannot occur unless the broadcast medium is acquired by the source controller and are carried out atomically with a distribute fashions thanks to \textit{serialization} over the broadcast medium}.
+
+When we perform a read, we also need to locate a data item when a cache miss occurs. In a \textbf{write-through cache}, it is easy to find the recent value of a data item, \textit{since all written data are always sent to the memory, from which the most recent value of a data item can always be fetched} (using write through simplifies the implementation of cache coherence). For a \textbf{write-back cache}, the problem of finding the most recent data value is
+harder, since the most recent value of a data item can be in a cache rather than in memory (the CPU must get data from another cache)
+
+
+\newpage
 \section{Slide \textit{'kernel-level-memory-management'}}
 
 \subsection{Page Descriptor}
