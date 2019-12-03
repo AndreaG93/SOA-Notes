@@ -115,6 +115,44 @@ The parameter \texttt{gfp\_mask} is a group of flags that specify \textbf{how to
 \end{description}
 
 
+
+\section{TLB operation}
+
+Besides general-purpose hardware caches, x86 processors include a cache called \textit{Translation Lookaside Buffers} (\textbf{TLB}) to speed up linear address translation.
+
+When a linear address is used for the first time, the corresponding physical address is computed through slow accesses to the Page Tables in RAM. The physical address is then stored in a TLB entry so that further references to the same linear address can be quickly translated.
+
+In a multiprocessor system, \textbf{each CPU has its own TLB, called the \textbf{local TLB} of the CPU}. Contrary to the hardware cache, the corresponding entries of the TLB need \textbf{not} be synchronized, because processes running on the existing CPUs may associate the same linear address with different physical ones.
+
+\textbf{When the \texttt{cr3} control register of a CPU is modified, the hardware automatically invalidates all entries of the local TLB, because a new set of page tables is in use (page table changes).} \textbf{However changes inside the current page table are not automatically reflected within the TLB.}
+
+Fortunately, Linux offers several TLB flush methods that should be applied appropriately, depending on the type of page table change:
+\begin{description}
+\item[\texttt{flush\_tlb\_all}] This flushes the \textbf{entire TLB on all processors} running in the system, which makes it the most expensive TLB flush operation. It is used when we have made changes into the kernel page table entries. \textbf{After it completes, all modifications to the page tables will be visible globally to all processors.}
+
+\item[\texttt{flush\_tlb\_mm(struct mm\_struct *mm)}] Flushes all TLB entries of the non-global pages owned by a given process that is all entries related to the userspace portion for the requested \texttt{mm} context. Is used when forking a new process.
+
+\item[\texttt{flush\_tlb\_range}] Flushes the TLB entries corresponding to a linear address interval of a given process and is used when releasing a linear address interval of a process (when \texttt{mremap()} or \texttt{mprotect()} is used).
+
+\item[\texttt{flush\_tlb\_page}] Flushes the TLB of a single Page Table entry of a given process and is used when handling a page fault.
+
+\item[\texttt{flush\_tlb\_pgtables}] Flushes the TLB entries of a given contiguous subset of page tables of a given process and is called when a region is being unmapped and the page directory entries are being reclaimed 
+\end{description}
+
+Despite the rich set of TLB methods offered by the generic Linux kernel, every microprocessor usually offers a far more restricted set of TLB-invalidating assembly language instructions. \textbf{Intel microprocessors offers only two TLB-invalidating techniques: the automatic flush of all TLB entries when a value is loaded into the cr3 register and the \texttt{invlpg} assembly language instruction which invalidates a single TLB entry mapping a given linear address.}
+
+The architecture-independent TLB-invalidating methods are extended quite simply to multiprocessor systems. \textbf{The function running on a CPU sends an Interprocessor Interrupt to the other CPUs that forces them to execute the proper TLB-invalidating function} (\textbf{expensive} operation (\textit{direct cost}) due to latency for cross-CPU coordination in case of global TLB flushes).
+
+Remember that flush a TLB has the direct cost of the latency of the firmware level protocol for TLB entries invalidation (selective vs non-selective). Recall that flush TLB lead to \textbf{indirect cost} of refilling TLB entries and the latency experimented by MMU firmware upon misses in the translation process of virtual to physical addresses.
+
+\subsubsection{When flush TLB?}
+
+As a general rule,\textbf{ any process switch implies changing the set of active page tables and therefore local TLB entries relative to the old page tables must be flushed}; this is done automatically when the kernel writes the address of the new Page Global Directory into the \texttt{cr3} control register.
+
+Besides \textbf{process switches}, there are other cases in which the kernel needs to flush some entries in a TLB. For instance, when the kernel assigns a page frame to a User Mode process and stores its physical address into a Page Table entry, it must flush any local TLB entry that refers to the corresponding linear address (virtual addresses accessible \textbf{locally} in time-sharing concurrency). On multiprocessor systems, the kernel also must flush the same TLB entry on the CPUs that are using the same set of page tables, if any (virtual addresses accessible \textbf{globally}  by every CPU/core in real-time-concurrency).
+
+Kernel-page mapping has a \textit{global} nature, therefore when we use \texttt{vmalloc()} / \texttt{vfree()} on a specific CPU, all the other must observer mapping updates and TLB flush is necessary. 
+
 \section{Part 1}
 
 Since a data dependence can limit the amount of instruction-level parallelism
