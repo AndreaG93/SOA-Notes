@@ -12,6 +12,32 @@
 
 \section{Slide \textit{'hardware-insights'}}
 
+\section{OOO Pipeline execution and imprecise exceptions}
+
+When processor executes instructions in an order governed by the availability of input data and execution units, rather than by their original order in a program, we are adopting an \textbf{out-of-order execution paradigm}; \textbf{in other words different instructions can surpass each other depending on data or micro-controller availability.} We distinguish two events when we use this kind of paradigm: the \textbf{emission}, that is the action of injecting instructions into the pipeline; the \textbf{retire}, that is the action of committing instructions and making their side effects visible in terms of ISA exposed architectural resources
+
+\textbf{Is important to recall that out-of-order completion must preserve exception behaviour in the sense that exactly those exceptions that would arise if the program were executed in strict program order actually do arise}. However, when we use OOO execution paradigm a processor may generate the so called \textbf{imprecise exceptions}. \textbf{An exception is imprecise if the processor state  when  an  exception  is  raised  does  not  look  exactly  as  if  the instructions were executed sequentially in strict program order}. In other words imprecise exceptions can occur because when:
+
+\begin{itemize}
+\item The pipeline may have already completed instructions that are later in program order than the instruction causing the exception.
+\item The pipeline may have not yet completed some instructions that are earlier in program order than the instruction causing the exception.
+\end{itemize}
+
+\textbf{Recall that any instruction may change the micro-architectural state, although finally not committing its actions onto ISA exposed resources.} Since the the pipeline may have not yet completed the execution of instructions preceding the offending one, hardware status can been already changed an this fact can be exploited by several attacks (like \textbf{Meltdown}).
+
+\section{Tomasulo algorithm}
+
+Tomasulo’s algorithm is a computer architecture hardware algorithm for dynamic scheduling of instructions that allows out-of-order execution and enables more efficient use of multiple execution units. Suppose two operation A and B such that A precedes B in program order, that algorithm permit to resolve three hazard:
+
+\begin{description}
+\item[RAW (Read After Write)] B reads a datum before A writes it.
+\item[WAW (Write After Write)] B writes a datum before A writes the same datum.
+
+\item[WAR (Write After Read)] B writes a datum before A reads the same datum.
+\end{description}
+
+\textbf{RAW hazards are avoided by executing an instruction only when its operands are available, while WAR and WAW hazards are eliminated by \textit{register renaming}}
+
 \subsection{UMA}
 
 When we have a \textbf{single main memory} that has a \textit{symmetric relationship to all processors and a uniform access time from any processor}, these multiprocessors are most often called \textit{symmetric shared-memory multiprocessors} (\textbf{SMPs}), and this style of architecture is sometimes called \textit{uniform memory access} (\textbf{UMA}): in fact, \textbf{all processors have a uniform latency from memory}. \textbf{The term shared memory refers to the fact that the address space is shared; that is, the same physical address on two processors refers to the same location in memory.} In this architecture all CPUs can have one or more level of cache. However this architecture is obliviously \textbf{not} scalable when the number of CPUs grows.
