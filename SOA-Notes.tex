@@ -10,6 +10,30 @@
 \usepackage{amssymb}
 \begin{document}
 
+\section{Slide \textit{'hardware-insights'}}
+
+\subsection{UMA}
+
+When we have a \textbf{single main memory} that has a \textit{symmetric relationship to all processors and a uniform access time from any processor}, these multiprocessors are most often called \textit{symmetric shared-memory multiprocessors} (\textbf{SMPs}), and this style of architecture is sometimes called \textit{uniform memory access} (\textbf{UMA}): in fact, \textbf{all processors have a uniform latency from memory}. \textbf{The term shared memory refers to the fact that the address space is shared; that is, the same physical address on two processors refers to the same location in memory.} In this architecture all CPUs can have one or more level of cache. However this architecture is obliviously \textbf{not} scalable when the number of CPUs grows.
+
+\subsection{NUMA}
+
+When we have a distributed memory, a multiprocessor architecture is usually called \textit{distributed shared-memory} (\textbf{DSM}). When we use this kind of system, we have two benefits:
+\begin{itemize}
+\item A cost-effective way to scale the memory bandwidth if most of the accesses are to the local memory in the node.
+\item Reduces the latency for accesses to the local memory by a CPU.
+\end{itemize}
+
+The key disadvantages for that architecture is that communicating data between processors becomes more complex, \textbf{and that it requires more effort in the software to take advantage of the increased memory bandwidth afforded by distributed memories.}
+
+The DSM multiprocessors are also called \textbf{NUMAs} (\textit{non-uniform memory access}), \textbf{since the access time depends on the location of a data word in memory.} In fact, when a CPU wants to access to an item stored into his node, performing a \textit{local access} involving inner private/shared caches and controllers, access latency is very low. However when a CPU wants to access to an item stored on another node, performing a \textit{remote accesses} involving remote controllers and caches, latency can be very high respect to previous case.
+
+\section{The problem of cache coherence}
+
+Unfortunately, \textbf{the view of memory held by different processors is through their individual caches}, which, without any additional precautions, could end up seeing different values of a same shared data (\textbf{cache coherence} problem).
+
+By definition, \textbf{coherence defines what values can be returned by a read} while \textbf{consistency determines when a written value will be returned by a read}.
+
 \section{Slide \textit{'kernel-level-memory-management'}}
 
 \subsection{Page Descriptor}
