@@ -196,7 +196,7 @@ The parameter \texttt{gfp\_mask} is a group of flags that specify \textbf{how to
 
 
 
-\section{TLB operation}
+\subsection{TLB operation}
 
 Besides general-purpose hardware caches, x86 processors include a cache called \textit{Translation Lookaside Buffers} (\textbf{TLB}) to speed up linear address translation.
 
@@ -235,6 +235,62 @@ Kernel-page mapping has a \textit{global} nature, therefore when we use \texttt{
 
 \newpage
 \section{Slide \textit{'kernel-level-task-management'}}
+
+\subsection{Interrupt handling}
+
+Under Linux, hardware interrupts are called \textbf{IRQ}'s (\textit{Interrupt Requests}) and their management  typically occurs via a \textbf{two-level logic}:
+\begin{description}
+\item[Top Half] A routine that actually responds to the interrupt and do a minimal amount of work to schedule its bottom half (this operation is very fast).
+\item[Bottom Half] A routine scheduled by top half which execute whatever other work is required to handle the interrupt (such as awakening processes, starting up another I/O operation, and so on)
+\end{description}
+
+For instance, when a network interface reports the arrival of a new packet, the top half routine just retrieves the data and pushes it up to the protocol layer; actual processing of the packet is performed in a bottom half.
+
+The most important aspect of this setup it that it permits the \textit{top half to service a new interrupt while the bottom half is still working}; \textbf{in fact all interrupts are enabled during execution of the bottom half}. Generally the execution of top half code is handled according to a \textit{non-interruptible scheme} (\textbf{but isn't mandatory}). 
+
+This scheme permit to \textbf{avoid to keep locked resources when an interrupt occurs} (we may incur the risk of delaying critical actions as a spin-lock release) \textbf{avoiding possible deadlocks} when a slow interrupt management is hit by the activation of another one that needs the same resources. \textbf{Moreover this scheme keep
+kernel response time small which is a very important property for many time-critical applications that expect their interrupt requests to be serviced in a few milliseconds.}
+
+\subsection{Softirqs, Tasklets and work queues}
+
+Form Linux 2.6, two different mechanisms are used to implement top/bottom-half processing:
+\begin{itemize}
+\item The so-called \textit{deferrable functions}, which we will call as \textbf{softirqs} and \textbf{tasklets}: they are very fast, but all tasklet code must be atomic.
+\item The \textbf{Workqueues}, which may have a higher latency but that are allowed to sleep.
+\end{itemize}
+
+\subsubsection{Softirqs}
+
+\textbf{Softirqs are statically allocated}, that is they are defined at compile time. The main data structure used to represent softirqs is the \texttt{softirq\_vec} array, which includes \texttt{NR\_SOFTIRQS} (32 entries) elements of type \texttt{softirq\_action}. \textbf{Observer that the priority of a softirq is the index of the corresponding \texttt{softirq\_action} element inside the array}. Some of the softirqs used in Linux are:
+
+\begin{description}
+\item[\texttt{HI\_SOFTIRQ}] With priority equal to 0 (first element of array) and it handles high priority tasklets.
+\item[\texttt{TIMER\_SOFTIRQ}] With priority equal to 1 and it is used for timer related interrupts.
+\end{description}
+
+Another crucial data structure for implementing the softirqs is a \textbf{per-CPU 32-bit mask describing the pending softirqs}; it is stored in the \texttt{\_\_softirq\_pending} field of the \texttt{irq\_cpustat\_t} data structure (which is one of the data structure used per each CPU in the system). To get and set the value of the bit mask, the kernel makes use of the \texttt{local\_softirq\_pending()}. This is way softirqs can run concurrently on several CPUs, even if they are of the same type.
+
+During interrupt acceptance, top half routine set properly the bit mask in the \texttt{\_\_softirq\_pending} field and then exit. 
+
+Checks for active (pending) softirqs should be perfomed periodically, but without inducing too much overhead. They are performed in a few points of the kernel code. 
+
+For this purpose, Linux, \textbf{for each CPU}, uses the so called \texttt{ksoftirqd/n} kernel thread (where n is the logical number of the CPU) to manage softirqs array executing bottom halves asynchronously. Once awaken, that thread, running the \texttt{ksoftirqd()} function, checks softirq bit mask for pending softirqs inspecting the per-CPU field \texttt{\_\_softirq\_pending}. If there are no softirqs pending, the function puts the current thread in the \texttt{TASK\_INTERRUPTIBLE} state and invokes then the \texttt{cond\_resched()} function to perform a process switch; otherwise, the thread runs the softIRQ handler, running \texttt{do\_softirq()}.
+
+Be careful that the top half routine can set the bit mask telling that a \texttt{ksoftirqd/x} awaken on a CPU-core x will not process the handler associated with a given softIRQ; in this way we can \textbf{create affinity between SoftIRQs and CPU-cores in order to exploit NUMA machines}. Is also possible to set bit mask  in order to build affinity on group of CPU for load balancing; \textbf{in other word is possible a multithread execution of bottom half tasks}.
+
+\subsubsection{tasklet}
+
+When we use softirqs not necessarily we queue bottom half task, so this setup can be even more responsive. However the queuing concept is still there for on demand usage, if required. 
+
+Tasklets are built on top of two softirqs named \texttt{HI\_SOFTIRQ} and \texttt{TASKLET\_SOFTIRQ}. Several tasklets may be associated with the same softirq, each tasklet carrying its own function. There is no real difference between the two softirqs, except that \texttt{do\_softirq()} executes \texttt{HI\_SOFTIRQ}’s tasklets before \texttt{TASKLET\_SOFTIRQ}’s tasklets.
+
+Tasklets and high-priority tasklets are stored in the \texttt{tasklet_vec} and \texttt{tasklet_hi_vec}
+arrays respectively and both of them include \texttt{NR\_CPUS} elements which are \textbf{list} of \textbf{tasklet descriptors} which are a data structure of type \texttt{tasklet\_struct}
+
+
+
+
+\subsection{Timers}
 
 On the x86 architecture, the kernel must explicitly interact with several kinds of clock circuits which are used both to keep track of the current time of day and to make precise time measurements. \textbf{The timer circuits are programmed by the kernel, so that they issue interrupts at a fixed, predefined frequency; such periodic interrupts are crucial for implementing the software timers used by the kernel and the user programs}. 
 
