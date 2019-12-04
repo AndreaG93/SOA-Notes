@@ -88,6 +88,9 @@ To perform any operation, the processor simply \textbf{acquires} bus access and 
 When we perform a read, we also need to locate a data item when a cache miss occurs. In a \textbf{write-through cache}, it is easy to find the recent value of a data item, \textit{since all written data are always sent to the memory, from which the most recent value of a data item can always be fetched} (using write through simplifies the implementation of cache coherence). For a \textbf{write-back cache}, the problem of finding the most recent data value is
 harder, since the most recent value of a data item can be in a cache rather than in memory (the CPU must get data from another cache)
 
+\newpage
+\section{Slide \textit{'kernel-programming-basics'}}
+
 
 \newpage
 \section{Slide \textit{'kernel-level-memory-management'}}
@@ -303,6 +306,41 @@ in include \texttt{include/linux/interrupt.h}:
 
 Finally to execute tasklet associated with the \texttt{HI\_SOFTIRQ} softirq we run \texttt{tasklet\_hi\_action()}, while for those associated with \texttt{TASKLET\_SOFTIRQ} we use \texttt{tasklet\_action()}. 
 
+\textbf{Observer that if the tasklet has already been scheduled on a different CPU-core, it will not be moved to another CPU-core if it's still pending (generic softirqs can instead be processed by different CPU-cores)}
+
+\textbf{Tasklets run in interrupt context (see below)}
+
+\subsubsection{Work queue}
+
+The work queues have been introduced in Linux 2.6 and replace a similar construct called "task queue" used in Linux 2.4. Also the work queues are used to allow kernel functions to be activated and later executed by special kernel threads called \textit{worker threads}. 
+
+However there is one important difference with softirq and tasklet: \textbf{deferrable functions (that is softirqs and tasklet) run in interrupt context while functions in work queues run in process context}. \textit{Running in process context is the only way to execute functions that can block (for instance, functions that need to access some block of data on disk) because no process switch can take place in interrupt context.}
+
+\textbf{Observer that interrupts are enabled while the work queues are being run (except if the same work to be done disables them)}
+
+The main data structure associated with a work queue is a descriptor called \texttt{workqueue\_struct}, which contains \textbf{many} fields including an array of \texttt{NR\_CPUS} elements (the maximum number of CPUs in the system.) Each element is a descriptor of type \texttt{cpu\_workqueue\_struct}, which contains a \texttt{worklist} field which is the head of a doubly linked list collecting the pending functions of the work queue. Every pending function is represented by a \texttt{work\_struct} data structure.
+
+The \texttt{create\_workqueue("foo")} function receives as its parameter a string of characters and returns the address of a \texttt{workqueue\_struct} descriptor. The function also creates n worker threads (where n is the number of CPUs effectively present in the system), named after the string passed to the function: \texttt{foo/0, foo/1}, and so on. The \texttt{create\_singlethread\_workqueue()} function is similar, but it creates just one worker thread, no matter what the number of CPUs in the system is. To destroy a work queue the kernel invokes the \texttt{destroy\_workqueue()} function, which receives as its parameter a pointer to a \texttt{workqueue\_struct} array.
+
+Another very important API is \texttt{queue\_work()} which inserts a function (already packaged inside a \texttt{work\_struct} descriptor) in a work queue; it receives a pointer \texttt{wq} to the \texttt{workqueue\_struct} descriptor and a pointer work to the \texttt{work\_struct} descriptor.
+
+The \texttt{queue\_delayed\_work()} function is nearly identical to \texttt{queue\_work()}, except that it
+receives a third parameter representing a time delay in system ticks and it is used to ensure a minimum delay before the execution of the pending function.
+
+\texttt{cancel\_delayed\_work()} cancels a previously scheduled work queue function.
+The \texttt{flush\_workqueue()} function receives a \texttt{workqueue\_struct} descriptor address and blocks the calling process until all functions that are pending in the work queue terminate. 
+
+
+\subsubsection{The predefined work queue} 
+
+The kernel offers a predefined work queue called \textit{events}, which can be freely used by every kernel developer. The predefined work queue is nothing more than a standard work queue that may include functions of different kernel layers and I/O drivers.
+
+To make use of the predefined work queue, the kernel offers some APIs including \texttt{schedule\_work(struct work\_struct *work)} and \texttt{schedule\_work\_on(int cpu, struct work\_struct *work)}.
+
+\subsection{\texttt{container\_of}}
+
+The macro \texttt{container\_of(ptr, type, member)} takes, as you can see, three arguments: a pointer to the member of a data structure, the name of the type of the data structure, and the name of the member the pointer refers to. The macro yields the address of the container structure which accommodates the specified member.
+
 \subsection{Timers}
 
 On the x86 architecture, the kernel must explicitly interact with several kinds of clock circuits which are used both to keep track of the current time of day and to make precise time measurements. \textbf{The timer circuits are programmed by the kernel, so that they issue interrupts at a fixed, predefined frequency; such periodic interrupts are crucial for implementing the software timers used by the kernel and the user programs}. 
@@ -311,10 +349,33 @@ On the x86 architecture, the kernel must explicitly interact with several kinds 
 \item[Time Stamp Counter (TSC)] It is a counter accessible through the 64-bit \textit{Time Stamp Counter} (\textbf{TSC}) register, which can be read using \texttt{rdtsc} assembly language instruction. \textbf{It represents a counter that is increased at each clock signal.} It is used by Linux to determine the clock signal frequency while initializing the system; that task is accomplished using \texttt{calibrate\_tsc()}.
 \item[High Precision Event Timer (HPET)] The HPET represents a very powerful chip which provides up to \textbf{eight 32-bit or 64-bit independent counters exploitable by kernel}. Each counter is driven by its own clock signal, whose frequency must be at least 10 MHz and, therefore, the counter is increased at least once in \textbf{100 nanoseconds}. Any counter is associated with at most 32 timers, each of which is composed by a \textit{comparator} and a \textit{match register}. \textbf{The comparator is a circuit that checks the value in the counter against the value in the match register, and raises a hardware interrupt if a match is found. Some of the timers can be enabled to generate a periodic interrupt.}
 \item[LAPIC] The Local APIC Timer (LAPIC-T) represents another time-measuring device. This timer has a counter of \textbf{32 bits long} used to store the number of of ticks that must elapse before the interrupt is issued; therefore, the local timer can be programmed to issue interrupts at very low frequencies. \textbf{Observe that local APIC timer sends an interrupt only to its processor}. The APIC’s timer is based on the bus clock signal and can be can be programmed in such a way to decrease the timer counter every 1, 2, 4, 8, 16, 32, 64, or 128 bus clock signals.
-
 \end{description}
 
+\subsubsection{The timer interrupt handler}
 
+As said these timer circuits issues special interrupts called \textbf{timer interrupt}, which notifies the kernel
+that one more time interval has elapsed. Interrupts can both involve a specific CPU (CPU local timer interrupt signals timekeeping activities related to the local CPU, such as monitoring how long the current process has been running and updating the resource usage statistics) or signal activities not related to a specific CPU, such as handling of software timers and keeping the system time up-to-date.
+
+\subsection{Preemption}
+
+As a general definition a kernel is \textit{preemptive} \textbf{if a process switch may occur while the replaced process is executing a kernel function, that is, while it runs in Kernel Mode}. 
+
+\textbf{Kernel pre-emption is disabled when the \texttt{preempt\_count} field in the \texttt{thread\_info} descriptor referenced by the \texttt{current\_thread\_info()} macro \textbf{is greater than zero}}. Linux provides several APIs to manage kernel pre-emption:
+\begin{description}
+\item[\texttt{preempt\_count()}] Return the \texttt{preempt\_count} field in the \texttt{thread\_info} descriptor.
+\item[\texttt{preempt\_disable()}] Increases by one the value of the preemption counter.
+\item[\texttt{preempt\_enable\_no\_resched()}] Decreases by one the value of the preemption counter.
+\item[\texttt{preempt\_enable()}] Decreases by one the value of the preemption counter, and invokes \texttt{preempt\_schedule()} if the \texttt{TIF\_NEED\_RESCHED} flag in the \texttt{thread\_info} descriptor is set
+\end{description}
+
+But there are other two very important API and they are related to \textbf{per-CPU variables}. 
+
+Remember that a \textbf{\textit{per-CPU variables} is an array of data structures, one element per each CPU in the system}. A CPU should not access the elements of the array corresponding to the other CPUs; on the other hand, it can freely read and modify its own element without fear of race conditions, because it is the only CPU entitled to do so. \textbf{While per-CPU variables provide protection against concurrent accesses from several CPUs}, they do \textbf{not provide protection against accesses from asynchronous functions} (interrupt handlers and deferrable functions like tasklet and softirqs). \textbf{Therefore per-CPU variables are prone to race conditions caused by kernel pre-emption, both in uniprocessor and multiprocessor systems}. \textbf{As a general rule, a kernel control path should access a per-CPU variable with kernel preemption disabled.}. We have some API:
+
+\begin{description}
+\item[\texttt{get\_cpu\_var(name)}] Disables kernel preemption, then selects the local CPU’s element of the per-CPU array name
+\item[\texttt{put\_cpu\_var(name)}] Enables kernel preemption.
+\end{description}
 
 
 \end{document}
