@@ -91,6 +91,66 @@ harder, since the most recent value of a data item can be in a cache rather than
 \newpage
 \section{Slide \textit{'kernel-programming-basics'}}
 
+\subsection{Segmentation}
+
+Intel microprocessors perform address translation in \textbf{three} different ways:
+\begin{description}
+\item[Real Mode] This mode exists mostly to \textbf{maintain processor compatibility with older models and to allow the operating system to bootstrap}. In this modality, a logical address is composed of a \texttt{seg} segment (hold by a 16 bit \textit{segment register}) and an \texttt{off} offset (hold by a 16 bit \textit{general register}) while the corresponding physical address is simply computed using \texttt{seg*16 + off}: \textit{as a result, no Global Descriptor Table, Local Descriptor Table, or paging table is needed by the CPU addressing circuit to translate a logical address into a physical one}. \textbf{Observer that in real mode no segment specific protection information are provided, therefore this modality is unsuitable for modern operating system}. Around 1MB ($2^20$ B) of memory is allowed
+\item[Protected Mode] Similarly to real mode, a logical address consists of two parts: a \textbf{segment identifier} and an \textbf{offset} that specifies the relative address within the segment. However the target segment \textit{\textbf{identifier}} is a \textbf{13-bit field} present into a \textbf{16 bit field} called the \textbf{segment selector} keep by 16 bit segment register (\textbf{remaining 3 bit are used for protection purposes}) while a 32 bit general register holds the offset. The corresponding physical address is computed using the linear address of the first byte of the segment (which is hold by a special table) using following equation: \texttt{TABLE[segment].base + offset}. In this modality Up to 4 GB of memory is allowed.
+\item[Long Mode] Identical to protected mode but the offset is hold by 64-bit general registers (\textit{although up to 48-bit are used in canonical form}). In this way is possible to address up to $2^{48}$ B (256 TB) of linear memory.
+\end{description}
+
+\textbf{From now we describe protected mode}. To make it easy to retrieve segment selectors quickly, the processor provides \textbf{segmentation registers} whose only purpose is to hold segment selectors; these registers are called \texttt{cs} (\textbf{code segment register, which points to a segment containing program instructions}), \texttt{ss} (\textbf{stack segment register, which points to a segment containing the current program stack}), \texttt{ds} (\textbf{data segment register, which points to a segment containing global and static data}), \texttt{es}, \texttt{fs}, and \texttt{gs} (\textbf{these three segmentation registers are general purpose and may refer to arbitrary data segments}.)
+
+To be more precise, segment selectors have three fields:
+\begin{description}
+\item[index (13-bit)] identifies the Segment Descriptor entry contained in the GDT or in the LDT (see below).
+\item[Table Indicator (1-bit)] specifies whether the Segment Descriptor is included in the GDT (TI = 0) or in the LDT (TI = 1).
+\item[Requestor Privilege Level (RPL) (2-bit)] specifies the \textbf{Current Privilege Leve}l of the CPU when the corresponding Segment Selector is loaded into the \texttt{cs} register. The value 0 denotes the highest privilege level, while the value 3 denotes the lowest one. Linux uses only levels 0 and 3, which are respectively called \textbf{Kernel Mode} and \textbf{User Mode.}
+
+\end{description}
+
+ the 13-bit field which identifies the Segment Descriptor entry contained in the GDT or in the LDT (see below), 1-bit field which is te Table Indicator that specifies whether the Segment Descriptor is included in the GDT (TI = 0) or in the LDT (TI = 1). Requestor Privilege Level: specifies the Current Privilege Level of the CPU when the corresponding Seg-
+ment Selector is loaded into the cs register; it also may be used to selectively weaken the processor priv-
+ilege level when accessing data segments (see Intel documentation for details).
+
+\subsubsection{GDT and LDT}
+
+Each segment is represented by an \textbf{8-byte Segment Descriptor} that describes the segment characteristics. Segment Descriptors are stored either in the \textbf{Global Descriptor Table} (\textbf{GDT}) or in the \textbf{Local Descriptor Table} (\textbf{LDT}) \textbf{which are kept in main memory}.
+
+\textbf{The address (32 bit in protected mode, 64 bit in long mode) and size (always 16 bit) of the GDT in main memory are contained in the \texttt{gdtr} control register, while the address and size of the currently used LDT are contained in the \texttt{ldtr} control register.}
+
+\textbf{GDT is used for the mapping of linear addresses \textit{at least} for kernel mode} (that is to manage kernel level segments) while \textbf{LDT is used for user mode} (each process is permitted to have its own LDT). \textbf{However GDT is the unique used segment table in most operating systems}.
+
+\subsubsection{Segment descriptor}
+
+A Segment Descriptor, that is an entry of the GDT/LDT, has \textbf{many} fields including:
+\begin{description}
+\item[Base] Contains the linear address of the first byte of the segment.
+\item[G (Granularity flag)] if equal to 0, the segment size is expressed in bytes; otherwise, it is expressed in multiples of 4096 bytes.
+\item[Limit] Holds the offset of the last memory cell in the segment, \textit{thus binding the segment length}. When G is set to 0, the size of a segment may vary between 1 byte and 1 MB; otherwise, it may vary between 4 KB and 4 GB.
+\item[DPL (Descriptor Privilege Level)(2 bit)]: \textit{used to restrict accesses to the segment}. It represents the minimal CPU privilege level requested for accessing the segment. Therefore, a segment with its DPL set to 0 is accessible only when the CPL is 0 (Kernel Mode) while a segment with its DPL set to 3 is accessible with every CPL value.
+\item[P (Segment-Present)] is equal to 0 if the segment is not stored currently in main memory. Linux \textbf{always} sets this flag to 1, because it never swaps out whole segments to disk.
+\end{description}
+
+Now be careful. Because a Segment Descriptor is 8 bytes long, \textbf{its relative address inside the GDT/LDT is obtained by multiplying the 13-bit index field of the Segment Selector by 8}. For instance, if the GDT is at \texttt{0x00020000} (the value stored in the gdtr register) and the index specified by the Segment Selector is 2, the address of the corresponding Segment Descriptor is \texttt{0x00020000 + (2 x 8)}, or 0x00020010 (\textbf{all this in protected mode!!})
+
+The first entry of the GDT is always set to 0. This ensures that logical addresses with a \texttt{null} Segment Selector will be considered invalid, thus causing a processor exception. 
+
+\textbf{There a sort of cache to speed up the access to segment descriptor}. In fact for each of the six segmentation registers \textbf{there are additional non-programmable register which are used to contains the 8-byte Segment Descriptor}.  Every time a Segment Selector is loaded in a segmentation register, the corresponding Segment Descriptor is loaded from memory into the matching nonprogrammable CPU register. From then on, translations of logical addresses referring to that segment can be performed without accessing the GDT.
+
+\textbf{After to have computed the address of a Segment Descriptor, to obtain the linear address, we adds the offset of the logical address to the Base field of the Segment Descriptor.}
+
+\subsubsection{Segmentation in Linux}
+
+Linux uses segmentation in a very limited way. \textbf{All Linux processes running in User Mode use the same pair of segments to address instructions and data} which are called \textbf{user code segment} and \textbf{user data segment}, respectively. Similarly, \textbf{all Linux processes running in Kernel Mode use the same pair of segments to address instructions and data}: they are called \textbf{kernel code segment} and \textbf{kernel data segment}. Now there are some differences about values stored in the fields of their segmentation descriptors: for instance user data/code segments have a DPL equal to 3, while kernel data/code segments have a DPL equal to 0. All these segment descriptors have their base set to \texttt{0x00000000}. 
+
+The corresponding Segment Selectors are defined by the macros \texttt{\_\_USER\_CS}, \texttt{\_\_USER\_DS}, \texttt{\_\_KERNEL\_CS}, and \texttt{\_\_KERNEL\_DS}, respectively. To address the kernel code segment, for instance, the kernel just loads the value yielded by the \texttt{\_\_KERNEL\_CS} macro into the \texttt{cs} segmentation register. It is sufficient to load \texttt{\_\_KERNEL\_CS} into cs whenever the CPU switches to Kernel Mode (CPL equal to 0).
+
+
+
+
+
 
 \newpage
 \section{Slide \textit{'kernel-level-memory-management'}}
