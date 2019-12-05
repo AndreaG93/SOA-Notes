@@ -147,6 +147,39 @@ Linux uses segmentation in a very limited way. \textbf{All Linux processes runni
 
 The corresponding Segment Selectors are defined by the macros \texttt{\_\_USER\_CS}, \texttt{\_\_USER\_DS}, \texttt{\_\_KERNEL\_CS}, and \texttt{\_\_KERNEL\_DS}, respectively. To address the kernel code segment, for instance, the kernel just loads the value yielded by the \texttt{\_\_KERNEL\_CS} macro into the \texttt{cs} segmentation register. It is sufficient to load \texttt{\_\_KERNEL\_CS} into cs whenever the CPU switches to Kernel Mode (CPL equal to 0).
 
+\subsubsection{GDT}
+
+\textbf{There is one GDT for every CPU in the system} that is we have some replicated GDT which differs by some entries (this is important for performance motivation and for transparency of data access separation (same segment = to access different linear addresses by more CPU)). All GDTs are stored in the \texttt{cpu\_gdt\_table} array.  \textbf{Each GDT includes 18 segment descriptors and 14 unused, or reserved entries including the null one}. The most important segment descriptors are:
+\begin{itemize}
+\item Four segment descriptors corresponding to user and kernel code and data segments (see previous section).
+\item A \textbf{Task State Segment} (TSS), different for each processor in the system.
+\item A segment including the default Local Descriptor Table (LDT).
+\item Three \textbf{Thread-Local Storage} (TLS) segments: \textbf{this is a mechanism that allows multithreaded applications to make use of up to three segments containing data local to each thread}. The \texttt{set\_thread\_area()} and \texttt{get\_thread\_area()} system calls, respectively, create and release a TLS segment for the executing process.
+\end{itemize}
+
+\subsection{TSS}
+
+The 80x86 architecture includes a specific segment type called the \textbf{Task State Segment} (\textbf{TSS}). Linux uses the tss\_struct structure to describe the format of the TSS. As already mentioned in
+\textbf{The Task State Segments are sequentially stored into \texttt{init\_tss} array which stores one TSS for each CPU on the system}: in particular, the Base field of the TSS descriptor for the nth CPU points to the nth component of the \texttt{init\_tss} array. The DPL is set to 0, because processes in User Mode are not allowed to
+access TSS segments.
+
+\textbf{According to the original Intel design, TSS is normally used to store hardware contexts in case of process switch.} However, \textbf{Linux doesn't use hardware context switches because it uses a single TSS for each processor, instead of one for every process}. Linux use the TSS in only two cases:
+
+\begin{itemize}
+\item when the CPU switches from User Mode to Kernel Mode, \textbf{it fetches the address of the Kernel Mode stack from the TSS} 
+
+Note that each process descriptor includes a field called \texttt{thread} of type \texttt{thread\_struct}, in
+which the kernel saves the hardware context. This data structure includes fields for most of the CPU registers, except the general-purpose registers such as eax, ebx, etc., which are stored in the Kernel Mode stack.
+\item When a User Mode process attempts to access an I/O port, the CPU may need to access an I/O Permission Bitmap stored in the TSS to verify whether the process is allowed to address the port.
+\end{itemize}
+
+80x86 architecture provides a segment register called the task register (\texttt{TR}) to hold a segment selector that points to a valid TSS segment descriptor which resides in the GDT. To initialize TR, 80x86 ISA provides the assembly instruction \texttt{ltr} which loads the source operand into the task register, where the source operand (a general-purpose register or a memory location) contains a segment selector that points to the TSS contained into GDT. After that, the CPU uses the segment selector into \texttt{tr} to locate the segment descriptor for the TSS in GDT.
+
+\subsection{Control register}
+
+A \textbf{control registers} are a set of registers which changes or controls the general behavior of a CPU like its addressing mode, paging control, and coprocessor control and so on.
+
+
 
 
 
