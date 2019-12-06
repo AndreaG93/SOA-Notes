@@ -32,7 +32,6 @@ Tomasulo’s algorithm is a computer architecture hardware algorithm for dynamic
 \begin{description}
 \item[RAW (Read After Write)] B reads a datum before A writes it.
 \item[WAW (Write After Write)] B writes a datum before A writes the same datum.
-
 \item[WAR (Write After Read)] B writes a datum before A reads the same datum.
 \end{description}
 
@@ -143,7 +142,15 @@ The first entry of the GDT is always set to 0. This ensures that logical address
 
 \subsubsection{Segmentation in Linux}
 
-Linux uses segmentation in a very limited way. \textbf{All Linux processes running in User Mode use the same pair of segments to address instructions and data} which are called \textbf{user code segment} and \textbf{user data segment}, respectively. Similarly, \textbf{all Linux processes running in Kernel Mode use the same pair of segments to address instructions and data}: they are called \textbf{kernel code segment} and \textbf{kernel data segment}. Now there are some differences about values stored in the fields of their segmentation descriptors: for instance user data/code segments have a DPL equal to 3, while kernel data/code segments have a DPL equal to 0. All these segment descriptors have their base set to \texttt{0x00000000}. 
+Linux uses segmentation in a very limited way. Linux prefers paging to segmentation for the following reasons:
+\begin{enumerate}
+\item Memory management is simpler when all processes use the same segment register values, that is, when they share the same set of linear addresses.
+\item \textbf{One of the design objectives of Linux is portability to a wide range of architectures} (RISC architectures in particular have limited support for segmentation).
+\end{enumerate}
+
+
+
+ \textbf{All Linux processes running in User Mode use the same pair of segments to address instructions and data} which are called \textbf{user code segment} and \textbf{user data segment}, respectively. Similarly, \textbf{all Linux processes running in Kernel Mode use the same pair of segments to address instructions and data}: they are called \textbf{kernel code segment} and \textbf{kernel data segment}. Now there are some differences about values stored in the fields of their segmentation descriptors: for instance user data/code segments have a DPL equal to 3, while kernel data/code segments have a DPL equal to 0. All these segment descriptors have their base set to \texttt{0x00000000}. 
 
 The corresponding Segment Selectors are defined by the macros \texttt{\_\_USER\_CS}, \texttt{\_\_USER\_DS}, \texttt{\_\_KERNEL\_CS}, and \texttt{\_\_KERNEL\_DS}, respectively. To address the kernel code segment, for instance, the kernel just loads the value yielded by the \texttt{\_\_KERNEL\_CS} macro into the \texttt{cs} segmentation register. It is sufficient to load \texttt{\_\_KERNEL\_CS} into cs whenever the CPU switches to Kernel Mode (CPL equal to 0).
 
@@ -177,11 +184,69 @@ which the kernel saves the hardware context. This data structure includes fields
 
 \subsection{Control register}
 
-A \textbf{control registers} are a set of registers which changes or controls the general behavior of a CPU like its addressing mode, paging control, and coprocessor control and so on.
+A \textbf{control registers} are a set of registers which changes or controls the general behavior of a CPU like its addressing mode, paging control, and coprocessor control and so on. In modern x86 machines we have:
+\begin{description}
+\item[CR0] On x86-64 processors in long mode, it is 64 bits long register which have many control bits. The most important are:
+\begin{itemize}
+\item Bit 0 - PE Protected Mode Enable -If 1, system is in protected mode, else system is in real mode.
+\item Bit 31 - PG Paging If 1, enable paging and use the CR3 register, else disable paging. 
+\item Bit 16 - WP Write protect When set, the CPU can't write to read-only pages when privilege level is 0 
+\end{itemize}
+\item[CR1] Reserved.
+\item[CR2] Contains a value called \textit{Page Fault Linear Address} (\textbf{PFLA}). \textbf{When a page fault occurs, the address the program attempted to access is stored in the CR2 register.}
+\item[CR3] Used when virtual addressing is enabled, hence when the PG bit is set in CR0. CR3 holds a pointer to the \textit{page directory} for the current task
+\end{description}
+
+\subsection{Management of interrupts}
+
+Linux keeps a system table called \textbf{Interrupt Descriptor Table} (\textbf{IDT}) to \textbf{associate to each interrupt or exception vector with the address of the corresponding handler}. 
+
+On each CPU, the \texttt{idtr} (\textit{interrupt descriptor table register}) CPU register allows the IDT to be located in memory. In fact, in protected mode it holds:
+\begin{enumerate}
+\item a 48 bit field (\textit{64 bit in long mode}) which specifies the IDT base linear address.
+\item a 16 bit field which provides the IDT max length, that is the number of entries currently present in it. 
+\end{enumerate}
+
+There are two assembly instruction capable to manipulate the IDT:
+\begin{description}
+\item[\texttt{lidt} (Load IDT)] It is used to Load the values in the source operand into IDT. 
+\item[\texttt{sidt} (Store IDT)] It is used to store the content the interrupt descriptor table register in the destination operand.
+\end{description}
+
+\textbf{Remember that the IDT must be initialized by Linux before enabling interrupts by using the \texttt{lidt} assembly language instruction.} IDT is initialized with an excep-
+tion handler function for each recognized exception by \texttt{trap\_init()} function (\texttt{/usr/src/linux/kernel/traps.c}). For example the interrupt 0x80 is associated to \texttt{\_system\_call} entry point using \texttt{set\_system\_gate (0x80, \&system\_call)}.
+
+
+\textbf{In protected mode, each IDT's entry is an 8-byte (64 bit) descriptor} of type struct \texttt{desc\_struct} (which is defined in \texttt{include/asm-i386/desc.h}). In long mode each entry in the IDT grows by 64-bits. The IDT contains some descriptor's type and the value of the \texttt{Type} field encoded in the bits 40–43 identifies the descriptor type:
+\begin{description}
+\item[Interrupt Gate Descriptor] \textbf{They are used to handle interrupts}. \textit{Includes the Segment Selector and the offset inside the segment of an interrupt
+or exception handler}. While transferring control to the proper segment, the processor clears the \texttt{IF} (\textbf{Interrupt flag}) to disable further maskable interrupts (bit 40 set to 0, 41-43 to 1). 
+\item[Trap Gate Descriptor] \textbf{They are used to handle exceptions}. Similar to an interrupt gate, except that while transferring control to the proper
+segment, the processor does not modify the IF flag (bit 40 set to 1, 41-43 to 1).
+\end{description}
+
+A fully populated IDT is 2 KB (256 entries of 8 bytes each) in length. \textbf{All entry from 0 to 31 are reserved by Intel for processor generated exceptions} (general protection fault, page fault, etc.) while all the other entries are available for system programming purposes.
+
+The following architecture-dependent functions (defined in \texttt{arch/i386/kernel/traps.c}) are used to insert on entry in the IDT (note that \texttt{n} indicates the target entry of the IDT, while \texttt{addr} indicates the address of the software module to be invoked for handling the trap or the interrupt):
+\begin{description} 
+\item[\texttt{set\_trap\_gate(n,addr)}] Inserts a trap gate in the nth IDT entry. The Segment Selector inside the gate is set to the kernel code’s Segment Selector. The Offset field is set to addr. \textbf{The DPL field is set to 0} (\textit{we cannot rely on the \texttt{int} assembly instruction unless we are already executing in kernel mode}).
+\item[\texttt{set\_intr\_gate(n,addr)}] Inserts an interrupt gate in the nth IDT entry. The Segment Selector inside the gate is set to the kernel code's Segment Selector. The Offset field is set to addr. The DPL field is set to 0.
+\item[\texttt{set\_system\_gate(n,addr)}] Inserts a trap gate in the nth IDT entry. The Segment Selector inside the gate is set to the kernel code's Segment Selector. The Offset field is set to addr. \textbf{The DPL field is set to 3}.
+\end{description}
 
 
 
 
+
+
+
+
+
+\subsubsection{System calls}
+
+Linux System Call Table
+
+The following table lists the system calls for the Linux 2.2 kernel. It could also be thought of as an API for the interface between user space and kernel space. My motivation for making this table was to make programming in assembly language easier when using only system calls and not the C library (for more information on this topic, go to http://www.linuxassembly.org). On the left are the numbers of the system calls. This number will be put in register %eax. On the right of the table are the types of values to be put into the remaining registers before calling the software interrupt 'int 0x80'. After each syscall, an integer is returned in %eax. 
 
 
 
@@ -469,6 +534,73 @@ Remember that a \textbf{\textit{per-CPU variables} is an array of data structure
 \item[\texttt{get\_cpu\_var(name)}] Disables kernel preemption, then selects the local CPU’s element of the per-CPU array name
 \item[\texttt{put\_cpu\_var(name)}] Enables kernel preemption.
 \end{description}
+
+
+\newpage
+\section{Slide \textit{'trap-interrupt-architecture'}}
+
+\subsubsection{IPI}
+
+An \textbf{Inter-processor Interrupt} (\textbf{IPI}) \textbf{allow a CPU to send interrupt signals to any other CPU in the system}. An interprocessor interrupt is delivered directly as a message on the bus that connects the \textbf{local APIC} (\textit{Advanced Programmable Interrupt Controller}) of all CPUs. \textbf{An IPI is a synchronous event from the sender CPU-core point of view while it is an asynchronous one from recipient CPU-core point of view.}
+Classically, at least two priority levels are admitted:
+\begin{description}
+\item[High] Leads to immediate processing of the IPI at the recipient (\textit{a single IPI is accepted and stands out at any point in time})
+\item[Low] Low priority generally leads to queue the requests and process them via sequentialization
+\end{description}
+
+Each local APIC of each CPU of the system has several 32-bit registers (which can be used for posting IPI requests in the system), an internal clock; a local timer device; and two additional IRQ lines, \texttt{LINT0} and \texttt{LINT1}, reserved for local APIC interrupts. All local APICs are connected to an external I/O APIC, giving rise to a multi-APIC system.
+
+The I/O APIC consists of a set of 24 IRQ lines, a 24-entry Interrupt Redirection Table, programmable registers, and a message unit for sending and receiving APIC messages over the APIC bus.
+
+The multi-APIC system allows CPUs to generate interprocessor interrupts. When a CPU wishes to send an interrupt to another CPU, it stores the interrupt vector and the identifier of the target's local APIC in the \textbf{Interrupt Command Register} (\textbf{ICR}) of its own local APIC. A message is then sent via the APIC bus to the target's local APIC, which therefore issues a corresponding interrupt to its own CPU. 
+
+Interrupt requests coming from external hardware devices can be distributed among the available CPUs in two ways:
+\begin{description}
+\item[Static distribution] The interrupt is delivered to one specific CPU, to a subset of CPUs, or to all CPUs at once (broadcast mode).
+\item[Dynamic distribution] The IRQ signal is delivered to the local APIC of the processor that is executing the process with the lowest priority. However interrupts are distributed in a round-robin fashion among CPUs with the same task priority, adopting a technique called \textit{arbitration}.
+\end{description}
+
+
+
+Linux makes use of three kinds of interprocessor interrupts:
+
+\begin{description}
+\item[\texttt{CALL\_FUNCTION\_VECTOR}] It is used to force all CPUs to run a function passed by the sender. The corresponding interrupt handler is named \texttt{call\_function\_interrupt()}. 
+\item[\texttt{INVALIDATE\_TLB\_VECTOR}] It is used to force all CPUs to invalidate their TLB. The corresponding interrupt handler is named \texttt{invalidate\_interrupt()}. 
+\item[\texttt{RESCHEDULE\_VECTOR}] When a CPU receives this type of interrupt, the corresponding handler, named \texttt{reschedule\_interrupt()}, limits itself to acknowledging the interrupt. Rescheduling is done automatically when returning from the interrupt.
+\end{description}
+
+Thanks to the following group of functions, issuing interprocessor interrupts (IPIs) becomes an easy task:
+
+\begin{description}
+\item[\texttt{send\_IPI\_all()}] Sends an IPI to all CPUs (including the sender).
+\item[\texttt{send\_IPI\_allbutself()}] Sends an IPI to all CPUs except the sender.
+\item[\texttt{send\_IPI\_self()}] Sends an IPI to the sender CPU.
+\item[\texttt{send\_IPI\_mask()}] Sends an IPI to a group of CPUs specified by a bit mask.
+\end{description}
+
+
+\subsection{IST}
+
+In long mode, each IDT's entry have a very important field (3 bit) called \textbf{IST} (\textit{Interrupt Stack Table}) which is completely absent on i386. \textbf{The IST is used to automatically switch to a new stack for events such trap or interrupts.} This mechanism unconditionally switches stacks when it is enabled and it can be enabled on an individual interrupt-vector basis using IST field in the IDT entry. This means that some interrupt vectors can use the legacy mechanism for stack-switch and others can use the IST mechanism.
+
+\textbf{There can be up to 7 IST entries per CPU and they are located on the Task State Segment (TSS)}. The IST entries in the TSS point to dedicated stacks; each stack can be a different size. \textbf{When an interrupt occurs and the hardware loads such a descriptor, the hardware automatically sets the new stack pointer based on the IST value, then invokes the interrupt handler}.  
+
+There are many stack provided by IST mechanism, one of them is the \texttt{DOUBLEFAULT\_STACK}, which is used for the \textbf{Double Fault Exception} (\#\texttt{DF}), invoked when handling one exception causes another exception. Using a separate stack allows the kernel to recover from it well enough in many cases.
+
+\subsection{Exception handling}
+
+Exception handlers have a standard structure consisting of three steps:
+\begin{enumerate}
+\item Save the contents of most registers (that is a CPU snapshot) in the Kernel Mode stack (this part is coded in assembly language);
+\item Handle the exception by means of a high-level C function.
+\item Exit from the handler by means of the \texttt{ret\_from\_exception()} function.
+\end{enumerate}
+
+When a CPU receives an interrupt, it starts executing the code at the address found in the corresponding entry of the IDT. Registers is the first task of the interrupt handler and a pointer to the \texttt{pt\_regs struct} (\texttt{include/asm-i386/ptrace.h}) is used to save register.
+
+After the interrupt or exception is processed, \texttt{iret} assembly instruction is used to return program control from an exception or interrupt handler to a program or procedure that was interrupted by an exception. In Protected Mode, the action of the \texttt{iret} instruction depends on the settings of the \texttt{NT} (nested task) flag:
+If the NT flag (EFLAGS register) is cleared, the \texttt{iret} instruction performs a far return from the interrupt procedure, without a task switch. Otherwise \texttt{iret} instruction performs a task switch (return) from a nested task
 
 
 \end{document}
