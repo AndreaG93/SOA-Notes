@@ -253,6 +253,108 @@ The following table lists the system calls for the Linux 2.2 kernel. It could al
 \newpage
 \section{Slide \textit{'kernel-level-memory-management'}}
 
+
+
+
+\subsection{Pagination}
+
+The paging unit thinks of all RAM as partitioned into fixed-length \textit{page frames}. Each page frame contains a \textit{page}, that is, the length of a page frame coincides with that of a page. A page frame is a constituent of main memory, and hence it is a storage area. 
+It is important to distinguish a page from a page frame; the former is just a block of data, which may be stored in any page frame or on disk.
+
+The data structures that map linear to physical addresses are called \textbf{page tables}; \textit{ they are stored in main memory and must be properly initialized by the kernel before enabling the paging unit.}
+
+\textbf{In 32-architectures, the linear address is 32 bit long} and is divided into three fields:
+\begin{description}
+\item[Directory] The most significant 10 bits.
+\item[Table] The intermediate 10 bits.
+\item[Offset] The least significant 12 bits.
+\end{description}
+
+\textbf{The physical address of the Page Directory in use is stored in a control register named \texttt{cr3}}. The translation of linear addresses is accomplished in this way:
+\begin{enumerate}
+\item The \textit{Directory field} within the linear address determines the entry in the Page Directory that points to the proper Page Table.
+\item The \textit{Table field}, in turn, determines the entry in the Page Table that contains the physical address of the page frame containing the page.
+\item The Offset field determines the relative position within the page frame. 
+\end{enumerate}
+
+Because Offset field is 12 bits long, each page consists of 4096 bytes of data; therefore paging unit of Intel processors handles 4 KB pages.
+
+Both the Directory and the Table fields are 10 bits long, so Page Directories and Page Tables can include up to $1024$ entries. It follows that a Page Directory can address
+up to $1024 \times 1024 \times 4096=2^{32}$ memory cells.
+
+
+\textbf{Up to version 2.6.10, the Linux paging model consisted of three paging levels, but, starting with version 2.6.11, a four-level paging model has been adopted}.
+
+The four types of page tables are called:
+\begin{description}
+\item[Page Global Directory] Its entry type is \texttt{pgd\_t}
+\item[Page Upper Directory] Its entry type is \texttt{pud\_t}
+\item[Page Middle Directory] Its entry type is \texttt{pmd\_t}
+\item[Page Table] Its entry type is \texttt{pte\_t}
+\end{description}
+
+
+The Page Global Directory includes the addresses of several Page Upper Directories, which in turn include the addresses of several Page Middle Directories, which in
+turn include the addresses of several Page Tables. Each Page Table entry points to a page frame. \textbf{Entry data types (defined into \texttt{include/asm-i386/page.h}) are 64-bit data types when PAE is enabled and 32-bit data types otherwise.}
+
+Linux adopts some trick in order that paging model fits both 32-bit and 64-bit architectures maintaining the same code and structure:
+\begin{description}
+\item[32-bit architectures (PAE not enabled)] Since two paging levels are sufficient, Linux kernel set the number of entries of the Page Upper Directory and Page Middle Directory to 1.
+\item[32-bit architectures (PAE enabled)] Three paging levels are used; in this case the Page Upper Directory is virtually eliminated setting its size to 1.
+\end{description}
+
+The following macros define the size of the page tables blocks (\texttt{include/asm-i386/pgtable-2level.h}):
+\begin{itemize}
+\item \texttt{\#define PTRS\_PER\_PGD    1024}
+\item \texttt{\#define PTRS\_PER\_PMD    1}
+\item \texttt{\#define PTRS\_PER\_PTE    1024}
+\end{itemize}
+
+\subsubsection{Kernel Page Initialization}
+
+We now describe how the kernel initializes its own page tables. \textbf{Right after the kernel image is loaded into memory, the CPU is still running in real mode; thus, paging is not enabled.}
+
+First of all, all normal code in \texttt{vmlinuz} is compiled with the base address at \texttt{PAGE\_OFFSET} + 1 MB; \textbf{therefore the kernel is actually loaded starting from the first megabyte of memory} (the first megabyte is typically used by BIOS to store system hardware configuration after \texttt{Power-On Self-Test} (POST) and for some BIOS routines used to interact with some devices; therefore, this memory area is ignored by Linux).
+
+A provisional Page Global Directory is initialized statically during kernel compilation and it is contained into the \texttt{swapper\_pg\_dir} variable (now \texttt{init\_level4\_pgt} on x86-64/kernel3 or \texttt{init\_top\_pgt} on x86-64/kernel4)), placed using linker directives at 0x00101000, while the provisional Page Tables are initialized by the \texttt{startup\_32()} assembly language function defined in \texttt{arch/i386/kernel/head.S}. 
+
+In the first phase, the kernel creates, invoking \texttt{alloc\_bootmem\_low\_pages(number of page)} (defined in \texttt{include/linux/bootmem.h}) a limited address space including the kernel's code and data segments, the initial Page Tables, and 128 KB for some dynamic data structures: all of this fit in the first 8 MB of RAM. The objective of this phase of paging is to allow these 8 MB of RAM to be easily addressed.
+
+\textsc{The Kernel creates the desired mapping by filling all the \texttt{swapper\_pg\_dir} entries with zeroes, except for entries 0, 1, 0x300 (decimal 768), and 0x301 (decimal 769);   The address field of entries 0 and 0x300 is set to the physical address of pg0, while the address field of entries 1 and 0x301 is set to the physical address of the page frame following pg0.}
+
+
+
+
+\subsubsection{Describing a Page Table Entry}
+
+As mentioned, each entry is described by the structs \texttt{pte\_t}, \texttt{pmd\_t}, \texttt{pud\_t} and \texttt{pgd\_t}. Even though these are often just \texttt{unsigned integers}, they are defined as structs for type protection so that they will not be used inappropriately.
+
+For type casting, several macros are provided in \texttt{asm/page.h}, which takes the above types and returns an unsigned integer. They are \texttt{pte\_val()}, \texttt{pmd\_val()}, \texttt{pud\_val()} e \texttt{pgd\_val()}. To cast an unsigned integer into the required type other more macros are provided \texttt{\_\_pte()}, \texttt{\_\_pmd()}, \texttt{\_\_pgd()} and \texttt{\_\_pud}.
+
+
+The entries of Page Directories and Page Tables have the same structure. Each entry includes many filed. the most important are:
+
+\begin{description}
+\item[Field containing the 20 most significant bits of a page frame physical address] Field containing the 20 most significant bits of a page frame physical address. Because each page frame has a 4-KB capacity, its physical address must be a multiple of 4096, so the 12 least significant bits of the physical address are always equal to 0. If the field refers to a Page Directory, the page frame contains a Page Table; if it refers to a Page Table, the page frame contains a page of data.
+\item[Present flag] If it is set, the referred-to page (or Page Table) is contained in main memory; if the flag is 0, the page is not contained in main memory.
+\item[Access flag] Set each time the paging unit addresses the corresponding page frame. This flag may be used by the operating system when selecting pages to be swapped out. The paging unit never resets this flag; this must be done by the operating system.
+\item[Dirty flag] Applies only to the Page Table entries. It is set each time a write operation is performed on the page frame. As with the Accessed flag, Dirty may be used by the operating system when selecting pages to be swapped out. The paging unit never resets this flag; this must be done by the operating system.
+\item[Read/Write flag] Contains the access right (Read/Write or Read) of the page or of the Page Table. (Zero means read only access)
+\item[User/Supervisor flag] Contains the privilege level required to access the page or Page Table (Zero means supervisor privilege)
+\item[Global flag] Applies only to Page Table entries. This flag was introduced to prevent frequently used pages from being flushed from the TLB cache. It works
+only if the Page Global Enable (PGE) flag of register \texttt{cr4} is set. Non-zero means that the corresponding TLB entry will not be flushed upon loading a new value into the page table pointer \texttt{cr3}.
+\item[Page Size flag] Applies only to Page Directory entries. If it is set, the entry refers to 4 MB page frame.
+\end{description}
+
+There are \textbf{many} macro in \texttt{include/asm-i386/pgtable.h} to set or read above fields within the entries of PTE or PGD like \texttt{pte\_exec()} (Reads the User/Supervisor flag) or \texttt{pte\_mkread()} (Sets the User/Supervisor flag) (all macros are architecture dependent). There are also macros for masking and setting those above fields like \texttt{\#define \_PAGE\_PRESENT 0x001} or \texttt{\#define \_PAGE\_RW 0x002} ecc.
+
+Recall that upon a TLB miss, firmware accesses the page table and then, after pick an entry, it first checked present flag: \textbf{if that flag is set to zero, a page fault occurs which gives rise to a trap.} After the execution of page fault handler, the instruction that gave rise to the trap can get finally re-executed but rememeber that it might rise additional traps (for instance, when it attempts to access a read only page in write mode (rising a segmentation fault))
+
+
+
+
+
+
 \subsection{Page Descriptor}
 
 In Linux, \textbf{state information of a page frame is kept in a page descriptor} of type \texttt{struct page} (or struct \texttt{mem\_map\_t}), and all page descriptors, which are 32 byte long, are stored in an array called \texttt{mem\_map} (the space required by it is slightly less than 1\% of the whole RAM). These data structures are defined into \texttt{include/linux/mm.h}. 
