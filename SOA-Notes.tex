@@ -687,6 +687,36 @@ Remember that a \textbf{\textit{per-CPU variables} is an array of data structure
 \end{description}
 
 
+\subsection{TCB}
+
+In Linux, the process descriptor is represented by a \texttt{task\_struct} structures (defined in \texttt{include/linux/sched.h}) which have many fields including:
+\begin{itemize}
+\item \texttt{volatile long state}
+\item \texttt{struct mm\_struct *mm}
+\item \texttt{pid\_t pid}
+\item \texttt{volatile long need\_resched}
+\item \texttt{long nice}
+\end{itemize}
+
+Each \texttt{task\_struct} structure includes a tasks field of type \texttt{list\_head} (\textit{a doubly linked list defined by Linux}) whose \texttt{prev} and \texttt{next} fields point, respectively, to the previous and to the next \texttt{task\_struct} element.
+
+The head of the process list is the \texttt{init\_task} descriptor (type \texttt{task\_struct}); it is the process descriptor of the so-called process 0 or \textit{swapper} or \textit{IDLE process}.
+
+The \texttt{state} field of the process descriptor describes process state and it consists of an array of flags, each of which describes a possible process state. In the current Linux version, these states are mutually exclusive, and hence exactly one flag of state always is set; the remaining flags are cleared. The possible states (there are some macro defined in \texttt{include/linux/sched.h}) are:
+\begin{description}
+\item[\texttt{TASK\_RUNNING}] The process is either executing on a CPU or waiting to be executed.
+\item[\texttt{EXIT\_ZOMBIE}] Process execution is terminated, but the parent process has not yet issued wait() system call to return information about the dead process.
+\item[\texttt{TASK\_INTERRUPTIBLE}] The process is suspended (sleeping) until some condition becomes true. Raising a hardware interrupt is an example of conditions that might wake up the process
+\end{description}
+
+When looking for a new process to run on a CPU, the kernel has to consider only the runnable processes (that is, the processes in the \texttt{TASK\_RUNNING} state).
+
+
+
+
+
+
+
 \newpage
 \section{Slide \textit{'trap-interrupt-architecture'}}
 
