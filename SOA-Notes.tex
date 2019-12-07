@@ -27,7 +27,7 @@ When processor executes instructions in an order governed by the availability of
 
 \subsection{Tomasulo algorithm}
 
-Tomasulo’s algorithm is a computer architecture hardware algorithm for dynamic scheduling of instructions that allows out-of-order execution and enables more efficient use of multiple execution units. Suppose two operation A and B such that A precedes B in program order, that algorithm permit to resolve three hazard:
+\textbf{Tomasulo’s algorithm is a computer architecture hardware algorithm for dynamic scheduling of instructions that allows out-of-order execution} and enables more efficient use of multiple execution units. Suppose two operation A and B such that A precedes B in program order, that algorithm permit to resolve three hazard:
 
 \begin{description}
 \item[RAW (Read After Write)] B reads a datum before A writes it.
@@ -36,6 +36,55 @@ Tomasulo’s algorithm is a computer architecture hardware algorithm for dynamic
 \end{description}
 
 \textbf{RAW hazards are avoided by executing an instruction only when its operands are available, while WAR and WAW hazards are eliminated by \textit{register renaming}}
+
+
+According to Tomasulo's scheme, register renaming is provided by special buffers called \textbf{reservation stations}, which have three fields:
+
+\begin{description}
+\item[OP] the operations to be executed.
+\item[Q1, Q2] the reservation stations that will produce the input for OP.
+\item[V1, V2] the values of the source operands.
+\end{description}
+
+In other words, \textbf{reservation station are used to hold the operands of instructions, fetching and buffering an operand as soon as it is available, eliminating the need to get the operand from a register}. Results are passed directly to functional units from the reservation stations where they are buffered, rather than going through the registers. This bypassing is done with the \textbf{common data bus} (\textbf{CDB}) that  allows  all  units  waiting for an operand to be loaded simultaneously (\textit{In pipelines with multiple execution units and issuing multiple instructions per clock, more than one result bus will be needed}).
+
+If one or more of the operands is not yet available the common data bus will be monitored. When an operand becomes available, it is placed into any reservation station awaiting it. When all the operands are available, the operation can be executed at the corresponding functional unit. By delaying instruction execution until the operands are available, RAW hazards are avoided. 
+
+\textbf{When successive writes to a register overlap in execution, only the last one is actually used to update the register.} As instructions are issued, the register specifiers for pending operands are renamed to the names of the reservation station, which provides register renaming. \textbf{Each functional unit has a single reservation station. The functional unit begins processing when it is free and when all source operands needed for an instruction are real.}
+
+A \textbf{re-order buffer} (ROB) is used TO acquire all the newly produced instruction results and keeps them uncommitted up to the point where the instruction can be committed in-order. 
+
+
+
+\subsection{Dynamic Branch Prediction}
+
+The hardware support for reducing the performance losses of branches is able to predict how they will behave. The behaviour of branches can be predicted both \textbf{statically} (\textit{to predict a branch as taken always: not very accurate}) at compile time and \textbf{dynamically} by the hardware at execution time, make predictions on the basis of profile information collected from earlier runs.
+
+The simplest dynamic branch-prediction scheme is a \textbf{branch-prediction buffer} or \textbf{branch history table}. 
+
+It is a small memory indexed by the lower portion of the address of the branch instruction. The memory contains a bit that says whether the branch was recently taken or not. The (speculative) execution flow follows the direction related to the prediction by the status bit, thus following the recent behaviour since recent past is expected to be representative of near future.
+
+However this simple 1-bit prediction scheme has a performance shortcoming: \textbf{Even if a branch is almost always taken, we will likely predict incorrectly twice, rather
+than once, when it is not taken, since the mis-prediction causes the prediction bit to be flipped}. 
+
+To remedy this weakness, 2-bit prediction schemes are often used. \textbf{In a 2-bit scheme, a prediction must miss twice before it is changed} (that is require 2 subsequent prediction errors for inverting the prediction). Benchmarks on 2-bit branch-prediction buffer with 4096 entries results in a prediction accuracy ranging from over 99\% to 82\%, or a mis-prediction rate of 1\% to 18\%.
+
+However this predictor schemes use only the recent behaviour of a single branch to predict the future behaviour of that branch. \textbf{It may be possible to improve the prediction accuracy if we also look at the recent behaviour of other branches rather than just the branch we are trying to predict.}
+
+Branch predictors that use the behaviour of other branches to make a prediction are called \textbf{correlating predictors} or \textbf{two-level predictors}. In the general case an $(m,n)$ predictor uses the behaviour of the last $m$ branches; that is there are $2^m$ branch predictors, each of which is an $n$-bit predictor for a single branch.  The global history of the most recent m branches can be recorded in m-bit shift register, where each bit records whether the branch was taken or not taken. The branch-prediction buffer can then be indexed using a concatenation of the low-order bits from the branch address with the m-bit global history.
+
+A 2-bit predictor with no global history is simply a (0,2) predictor. 
+
+\textbf{Tournament predictors makes prediction using multiple predictors, usually one based on global information and one based on local information, and combining them with a selector}. Existing tournament predictors use a 2-bit saturating counter per branch to choose among two different predictors based on which predictor (local, global, or even some mix) was most effective in recent predictions. The advantage of a tournament predictor is its ability to select the right predictor for a particular branch.
+
+Indirect branches are for which the target is not know at instruction fetch time. A table of 2-bit predictors are used which is indexed using lower portion of the address of the branch instruction.
+
+\textbf{Loop unrolling} is a software technique that allows reducing the frequency of branches when running loops, and the relative cost of branch control instructions. Unrolling simply replicates the loop body multiple times, adjusting the loop termination code, allowing from  different  iterations  to  be  scheduled together reducing the cost of branch.
+
+\textbf{Unrolling improves the performance of loop by eliminating overhead instructions, although it increases code size substantially (consequently locality and cache efficiency may degrade significantly) and the use of a more registers (leading to more frequent memory interactions).}
+
+
+
 
 \subsection{UMA}
 
