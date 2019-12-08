@@ -690,19 +690,22 @@ Remember that a \textbf{\textit{per-CPU variables} is an array of data structure
 \subsection{TCB}
 
 In Linux, the process descriptor is represented by a \texttt{task\_struct} structures (defined in \texttt{include/linux/sched.h}) which have many fields including:
-\begin{itemize}
-\item \texttt{volatile long state}
-\item \texttt{struct mm\_struct *mm}
-\item \texttt{pid\_t pid}
-\item \texttt{volatile long need\_resched}
-\item \texttt{long nice}
-\end{itemize}
+\begin{description}
+\item[\texttt{volatile long state}] Process state.
+\item[\texttt{struct mm\_struct *mm}] Pointer to memory are descriptor.
+\item[\texttt{thread\_info}] Low-level information (CPU specific) for the process.
+\item[\texttt{files\_struct}] Pointers to file descriptors.
+\item[\texttt{signal\_struct}] Signals received.
+\item[\texttt{pid\_t pid}]
+\item[\texttt{volatile long need\_resched}]
+\item[\texttt{long nice}]
+\end{description}
 
 Each \texttt{task\_struct} structure includes a tasks field of type \texttt{list\_head} (\textit{a doubly linked list defined by Linux}) whose \texttt{prev} and \texttt{next} fields point, respectively, to the previous and to the next \texttt{task\_struct} element.
 
 The head of the process list is the \texttt{init\_task} descriptor (type \texttt{task\_struct}); it is the process descriptor of the so-called process 0 or \textit{swapper} or \textit{IDLE process}.
 
-The \texttt{state} field of the process descriptor describes process state and it consists of an array of flags, each of which describes a possible process state. In the current Linux version, these states are mutually exclusive, and hence exactly one flag of state always is set; the remaining flags are cleared. The possible states (there are some macro defined in \texttt{include/linux/sched.h}) are:
+The \texttt{state} field consists of an array of flags, each of which describes a possible process state. In the current Linux version, these states are mutually exclusive, and hence exactly one flag of state always is set; the remaining flags are cleared. The possible states (there are some macro defined in \texttt{include/linux/sched.h}) are:
 \begin{description}
 \item[\texttt{TASK\_RUNNING}] The process is either executing on a CPU or waiting to be executed.
 \item[\texttt{EXIT\_ZOMBIE}] Process execution is terminated, but the parent process has not yet issued wait() system call to return information about the dead process.
@@ -711,10 +714,15 @@ The \texttt{state} field of the process descriptor describes process state and i
 
 When looking for a new process to run on a CPU, the kernel has to consider only the runnable processes (that is, the processes in the \texttt{TASK\_RUNNING} state).
 
+\subsubsection{TCB allocation}
 
+Processes are dynamic entities, whose lifetimes range from a few milliseconds to months, \textbf{therefore process descriptors are stored in dynamic memory rather than in the memory area permanently assigned to the kernel}. For each process, \textbf{Linux packs two different data structures in a single per-process memory area}:
+\begin{itemize}
+\item a small data structure linked to the process descriptor, namely the \texttt{thread\_info} structure.
+\item Kernel Mode process stack and the length of this memory area is usually 8,192 bytes (8 KB) (stored in two consecutive page frames with the first page frame aligned to a multiple of $2^13$).
+\end{itemize}
 
-
-
+The \texttt{thread\_info} structure resides at the beginning of the memory area, and the stack grows downward from the end. The growth of the stack size may lead to buffer overflow risks, if the stack size is not rescaled and memory fragmentation, if the stack size is rescaled
 
 
 \newpage
