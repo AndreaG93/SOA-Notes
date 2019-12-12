@@ -8,6 +8,7 @@
 \usepackage{amsmath}
 \usepackage{amsfonts}
 \usepackage{amssymb}
+\usepackage{booktabs}
 \begin{document}
 
 \section{Slide \textit{'hardware-insights'}}
@@ -790,6 +791,64 @@ When a CPU receives an interrupt, it starts executing the code at the address fo
 
 After the interrupt or exception is processed, \texttt{iret} assembly instruction is used to return program control from an exception or interrupt handler to a program or procedure that was interrupted by an exception. In Protected Mode, the action of the \texttt{iret} instruction depends on the settings of the \texttt{NT} (nested task) flag:
 If the NT flag (EFLAGS register) is cleared, the \texttt{iret} instruction performs a far return from the interrupt procedure, without a task switch. Otherwise \texttt{iret} instruction performs a task switch (return) from a nested task
+
+\newpage
+\section{Slide '\textit{virtual-file-system}'}
+
+The \textbf{Virtual File-system} (also known as \textbf{Virtual File-system Switch} or \textbf{VFS}) is a kernel software layer that handles all system calls related to a standard Unix file-system. 
+
+
+The key idea behind the VFS consists of introducing a common file model capable of representing all supported filesystems
+
+More essentially, the Linux kernel cannot hardcode a particular function to handle an operation such as read( ) or ioctl( ). Instead, it must use a pointer for each operation; the pointer is made to point to the proper function for the particular file-system being accessed.
+
+
+\begin{center}
+\begin{tabular}{lr} 
+\toprule
+ 
+\textbf{Superblock Object} &  \\ 
+
+\textbf{Inode Object} & \\
+
+\textbf{File Object} & \\
+
+\textbf{Dentry Object} & \\
+
+
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Filesystem Handling}
+
+Linux makes use of a system's \textbf{root file-system} \textit{which is directly mounted by the kernel during the booting phase and that holds the system initialization scripts and the most essential system programs}.
+
+The directory on which a file-system is mounted is called the \textbf{mount point}. (\textit{remember that the root directory of a mounted file-system hides the content of the mount point directory of the parent file-system, as well as the whole subtree of the parent file-system below the mount point}.)
+
+Is possible to mount the same file-system several times and, if it is mounted $n$ times, its root directory can be accessed
+through $n$ mount points, one per mount operation. Although the same file-system can be accessed by using different mount points, there is only one superblock object for all of them, no matter of how many times it has been mounted.
+
+For each mount operation, the kernel must save in memory several information, like the mount point, the mount flags or the relationships between the file-system to be mounted and the other mounted file-systems. Such information is stored in a mounted file-system descriptor of type \texttt{struct vfsmount}. 
+
+the \texttt{struct vfsmount} data structure has several fields including:
+
+
+\begin{center}
+\begin{tabular}{l|l|p{13cm}} 
+\toprule
+Type & Field & Description \\
+\midrule
+\texttt{struct vfsmount *} & \texttt{mnt\_parent} & Points to the parent file-system on which this file-system is mounted.\\
+\texttt{char *} & \texttt{mnt\_devname} & Device filename.\\
+\texttt{struct list\_head} & \texttt{mnt\_child} & \\
+
+
+
+\bottomrule
+\end{tabular}
+\end{center}
+
 
 
 \end{document}
