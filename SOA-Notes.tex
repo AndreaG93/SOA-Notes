@@ -1056,13 +1056,21 @@ The inodes representing device files, have an identifier which consists of a pai
 
 In x86 machines, device numbers are represented as bit masks stored into \texttt{kdev\_t i\_rdev} field of \texttt{struct inode}. In particular, major number corresponds to the least significant byte within the mask, while the minor correspond to second least significant byte. The macro \texttt{MKDEV(ma,mi)} (defined in \texttt{include/linux/kdev\_t.h}), can be used to setup a correct bit mask by starting from the two numbers.
 
-
-
-
 The \texttt{mknod()} system call is used to create device files. It receives the name of the device file, its type, and the major and minor numbers as its parameters. Device files are usually included in the \texttt{/dev} directory.
 
+\subsection{\texttt{sysfs}}
+
+sysfs is a \textbf{pseudo file-system} provided by the Linux kernel, \textbf{designed to allow User Mode applications to access kernel internal data structures}, exporting information and allowing the configuration of various kernel subsystems, hardware devices, and associated device drivers \textbf{through virtual files}via common I/O operations. \texttt{sysfs} is compiled into the kernel by default depending on the configuration option \texttt{CONFIG\_SYSFS} (visible only if \texttt{CONFIG\_EMBEDDED} is set).
 
 
+A goal of the sysfs filesystem is to expose the hierarchical relationships among the components of the device driver model. 
+\begin{itemize}
+\item Relationships between components of the device driver models are expressed in the sysfs filesystem as symbolic links between directories and files.
+\item The main role of regular files in the sysfs filesystem is to represent attributes of driv-
+ers and devices. 
+\item The related top-level directories of this filesystem are used to represent several kernel object like block, device, bus and so on.
+
+\end{itemize}
 
 
 
