@@ -831,23 +831,239 @@ through $n$ mount points, one per mount operation. Although the same file-system
 
 For each mount operation, the kernel must save in memory several information, like the mount point, the mount flags or the relationships between the file-system to be mounted and the other mounted file-systems. Such information is stored in a mounted file-system descriptor of type \texttt{struct vfsmount}. 
 
-the \texttt{struct vfsmount} data structure has several fields including:
-
+The \texttt{struct vfsmount} data structure, which from Linux kernel 4.8 is flagged with the \texttt{\_\_randomize\_layout} annotation, has several fields including:
 
 \begin{center}
 \begin{tabular}{l|l|p{13cm}} 
+
 \toprule
 Type & Field & Description \\
 \midrule
+
 \texttt{struct vfsmount *} & \texttt{mnt\_parent} & Points to the parent file-system on which this file-system is mounted.\\
-\texttt{char *} & \texttt{mnt\_devname} & Device filename.\\
-\texttt{struct list\_head} & \texttt{mnt\_child} & \\
-
-
+\texttt{char *} & \texttt{mnt\_devname} & Device file-name.\\
+\texttt{struct list\_head} & \texttt{mnt\_mounts} & Head of a list including all file-system descriptors mounted on directories of this filesystem. \\
+\texttt{struct list\_head} & \texttt{mnt\_child} & Pointers for the \texttt{mnt\_mounts} list of mounted file-system descriptors. \\
+\texttt{struct namespace *} & \texttt{mnt\_namespace} & Pointer to the name-space of the process that mounted the file-system. \\
+\texttt{struct super\_block *} & \texttt{mnt\_sb} & Points to the super-block object of this file-system.\\
+\texttt{int} & \texttt{mnt\_flags} & Flags that specify how some kinds of files in the mounted file-system are handled. For instance \texttt{MNT\_NOEXEC} flag is used to disallow program execution in the mounted file-system.\\
 
 \bottomrule
 \end{tabular}
 \end{center}
+
+\subsubsection{Superblock}
+
+\textbf{The superblock object is used to store information concerning a mounted file-system}. All superblock objects \textbf{are stored in a circular doubly linked list} where the first element of this list is represented by the \texttt{super\_blocks} variable. A superblock is represented by a \texttt{super\_block} struct whose fields are described in following table:
+
+\begin{center}
+\begin{tabular}{l|l|p{13cm}} 
+
+\toprule
+Type & Field & Description \\
+\midrule
+
+\texttt{struct file\_system\_type*} & \texttt{s\_type} & File-system type 
+
+\\
+
+\texttt{struct super\_operations*} & \texttt{s\_op} & The methods associated with a superblock are called \textit{superblock operations} and they are described by the \texttt{super\_operations struct}. Each specific file-system can define its own superblock operation and the \texttt{super\_operations} table is used to contain the address of them. They are invoked by VFS when it execute higher-level operations like deleting files or mounting disks like \texttt{read\_inode}, \texttt{write\_inode} etc.  
+
+Generally all superblock operation implementations are provided by all possible filesystem types; however, the fields corresponding to unimplemented methods are set to NULL.
+
+\\
+
+\texttt{struct dentry*} & \texttt{s\_root} & Dentry object of the file-system's root directory 
+
+\\
+
+\texttt{struct list\_head} & \texttt{s\_dirty} & List of modified inodes 
+
+\\
+ 
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Inode}
+
+\textbf{All information needed by the file-system to handle a file is included in a data structure called an \texttt{inode}}. \textit{A filename is a casually assigned label that can be changed, but the inode is unique to the file and remains the same as long as the file exists.} An inode object is represented by the \texttt{inode struct}:
+
+\begin{center}
+\begin{tabular}{l|l|p{13cm}} 
+
+\toprule
+Type & Field & Description \\
+\midrule
+\texttt{struct list\_head} & \texttt{i\_dentry} & The head of the list of dentry objects referencing this inode 
+
+\\
+\texttt{struct inode\_operations*} & \texttt{i\_op} & The methods associated with an inode object are also called \textit{inode operations} and they are stored by an \texttt{inode\_operations} structure, which is populated by all possible inodes and filesystem types. Available functions are \texttt{create}, \texttt{mkdir}, \texttt{symlink} etc.
+
+
+
+\\
+\texttt{struct file\_operations*} & \texttt{i\_fop} & Default file operations 
+
+\\
+\texttt{struct super\_block*} & \texttt{i\_sb} & Pointer to superblock object 
+
+\\
+ 
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+
+
+\subsubsection{Structure randomization}
+
+\textbf{Fields in a C structure are laid out by the compiler in order of their declaration}. One technique for attacking the kernel is to \textbf{overwrite specific fields of a structure with malicious values} and, when the order of fields in a structure is known, it is trivial to calculate the offsets where sensitive fields reside. 
+
+A useful type of field for such exploitation is the function pointer, which an attacker can overwrite with a location containing malicious code that the kernel can be tricked into executing. 
+
+\textbf{The \texttt{randstruct} plug-in randomly rearranges fields at compile time given a randomization seed}. When potential attackers do not know the layout of a structure, it becomes much harder for them to overwrite specific fields in those structures providing extra protection to the kernel. 
+
+To get structure randomization working in the kernel, the structures marked for randomization need to be tagged with the \texttt{\_\_randomize\_layout} annotation. Usually, structures that only contain function pointers are a big target for attackers and reordering them is unlikely to cause problems elsewhere; therefore \textbf{data structures consisting entirely of function pointers are automatically randomized}. This behaviour can be overridden with the \texttt{\_\_no\_randomize\_layout} annotation. 
+
+Naturally, \textbf{compiler support is necessary to get this feature to work}. Since Linux kernel 4.8, this plug-in is been used.
+
+
+\subsubsection{Mounting the Root Filesystem}
+
+Mounting the root filesystem is a crucial part of system initialization which is performed by the following functions:
+
+\begin{description}
+\item[\texttt{init\_rootfs()}] function registers the special file-system type \textit{rootfs} by properly populing a \texttt{struct file\_system\_type} variable called \texttt{rootfs\_fs\_type}.
+\item[\texttt{init\_mount\_tree()}] This function executes the following operations:
+
+\begin{enumerate}
+
+\item Using the \texttt{do\_kern\_mount()} function, passing to it the string "rootfs" as filesystem type, is possible to retrieve the address of the mounted filesystem descriptor. THis function invokes the \texttt{get\_sb} method of the rootfs filesystem previously discussed returning the address of the newly allocated superblock.
+
+\item Allocates a namespace object for the namespace of process 0, and inserts into it the mounted filesystem descriptor prevously allocated:
+
+\item Sets the namespace field of every other process in the system to the address of the namespace object;
+
+
+
+\item Sets the root directory and the current working directory of process $0$ (the idle process) to the root filesystem using \texttt{set\_fs\_pwd()} and \texttt{set\_fs\_root()} function.
+
+
+\end{enumerate}
+\end{description}
+
+\subsubsection{Namespaces}
+
+The list of mount points along directory tree is called \textbf{name-space}. Initially there is only one tree of mounted filesystems and each process can potentially access every file in a
+mounted filesystem by specifying the proper pathname. In Linux, every process might have its own tree of mounted filesystems, that is the so called namespace of the process.
+
+
+Usually most processes share the same namespace, which is the tree of mounted file-systems that is rooted at the system’s root filesystem and that is used by the init process. 
+
+However, a process gets a new namespace if it is created by the \texttt{clone()} system call with the \texttt{CLONE\_NEWNS} flag set. The new names-pace is then inherited by children pro-
+cesses if the parent creates them without the \texttt{CLONE\_NEWNS} flag.
+
+When a process mounts or unmounts a filesystem, it only modifies its namespace. Therefore, the change is visible to all processes that share the same namespace, and only to them. A process can even change the root filesystem of its namespace by using the Linux-specific \texttt{pivot\_root()} system call. (except if the
+mount operation is tagged with SHARED)
+
+\subsubsection{Relationship with processes}
+
+to represent the interactions between a process and a filesystem, Linux use the \texttt{fs\_struct} data structure (defined in \texttt{include/fs\_struct.h}), and each process descriptor has an \texttt{fs} field that points to the process \texttt{fs\_struct} structure. Some \texttt{fs\_struct} fields are described below:
+
+\begin{center}
+\begin{tabular}{l|l|p{13cm}} 
+
+\toprule
+Type & Field & Description \\
+\midrule
+
+\texttt{atomic\_t} & \texttt{count} & Number of processes sharing this table
+
+\\
+
+\texttt{struct dentry *} & \texttt{root} & Dentry of the root directory
+
+\\
+
+\texttt{struct dentry *} & \texttt{pwd} & Dentry of the current working directory
+
+\\
+
+\texttt{struct vfsmount *} & \texttt{rootmnt} & Mounted filesystem object of the root directory
+
+\\
+
+\texttt{struct vfsmount *} & \texttt{pwdmnt} & Mounted filesystem object of the current working directory
+
+\\
+ 
+\bottomrule
+\end{tabular}
+\end{center}
+
+In Linux 3.xx/4.7, the \texttt{fs\_struct} data structure is slightly different: the \texttt{root} and \texttt{pwd} fields are now of \texttt{struct path} type. From kernel 4.8, this data structure is flagged as \texttt{\_\_randomize\_layout}.
+
+The \texttt{files\_struct} data structure represents a table, whose address is contained in the \texttt{files} field of the process descriptor, used to specify which files are currently opened by the process. Some of their fields are described below:
+
+\begin{center}
+\begin{tabular}{l|l|p{13cm}} 
+
+\toprule
+Type & Field & Description \\
+\midrule
+
+\texttt{atomic\_t} & \texttt{count} & Number of processes sharing this table
+
+\\
+
+\texttt{struct file **} & \texttt{fd} & Pointer to array of file object pointers. The size of the array is stored in the \texttt{max\_fds} field. 
+
+For every file with an entry in the \texttt{fd} array, the array index is the \textit{file descriptor}. Usually, the first element (index 0) of the array is associated with the \textbf{standard input} of the process, the second with the \textbf{standard output}, and the third with the \textbf{standard error}.
+
+A process cannot use more than \texttt{NR\_OPEN} (usually $1048576$) file descriptors.
+
+\\
+
+\texttt{fd\_set *} & \texttt{open\_fds} & Pointer to open file descriptors.
+
+
+
+
+\\
+ 
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{Device Files}
+
+I/O devices are treated as special files called \textbf{device files}; thus, the same system calls used to interact with regular files on disk can be used to directly interact with I/O devices. device files can be of two types: 
+
+\begin{description}
+\item[Block Device] In this devices type, the data can be addressed randomly, and the time needed to transfer a data block is small and roughly the same.
+\item[Char Device] The data of a character device either cannot be addressed randomly, or they can be addressed randomly, but the time required to access a random datum largely depends on its position inside the device.
+\end{description} 
+
+The inodes representing device files, have an identifier which consists of a pair of numbers. 
+
+\begin{description}
+
+\item[Major number] It is used to identify the device type. Traditionally, all device files that have the same major number and the same type share the same set of file operations, because they are handled by the same device driver (\textit{the operations for managing the device are retrieved via the device driver tables})
+\item[Minor number] It is used to identify a specific device among a group of devices that share the same major number. For instance, a group of disks managed by the same disk controller have the same major number and different minor numbers.
+\end{description}
+
+In x86 machines, device numbers are represented as bit masks stored into \texttt{kdev\_t i\_rdev} field of \texttt{struct inode}. In particular, major number corresponds to the least significant byte within the mask, while the minor correspond to second least significant byte. The macro \texttt{MKDEV(ma,mi)} (defined in \texttt{include/linux/kdev\_t.h}), can be used to setup a correct bit mask by starting from the two numbers.
+
+
+
+
+The \texttt{mknod()} system call is used to create device files. It receives the name of the device file, its type, and the major and minor numbers as its parameters. Device files are usually included in the \texttt{/dev} directory.
+
+
+
+
 
 
 
