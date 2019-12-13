@@ -396,6 +396,24 @@ only if the Page Global Enable (PGE) flag of register \texttt{cr4} is set. Non-z
 \item[Page Size flag] Applies only to Page Directory entries. If it is set, the entry refers to 4 MB page frame.
 \end{description}
 
+\begin{center}
+\begin{tabular}{lr} 
+\toprule
+ 
+\textbf{Present flag} & If it is set, the referred-to page (or Page Table) is contained in main memory; if the flag is 0, the page is not contained in main memory. \\ 
+
+
+
+
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+
+
+
+
 There are \textbf{many} macro in \texttt{include/asm-i386/pgtable.h} to set or read above fields within the entries of PTE or PGD like \texttt{pte\_exec()} (Reads the User/Supervisor flag) or \texttt{pte\_mkread()} (Sets the User/Supervisor flag) (all macros are architecture dependent). There are also macros for masking and setting those above fields like \texttt{\#define \_PAGE\_PRESENT 0x001} or \texttt{\#define \_PAGE\_RW 0x002} ecc.
 
 Recall that upon a TLB miss, firmware accesses the page table and then, after pick an entry, it first checked present flag: \textbf{if that flag is set to zero, a page fault occurs which gives rise to a trap.} After the execution of page fault handler, the instruction that gave rise to the trap can get finally re-executed but rememeber that it might rise additional traps (for instance, when it attempts to access a read only page in write mode (rising a segmentation fault))
