@@ -1,14 +1,12 @@
 \documentclass[10pt,a4paper]{article}
 
-
 \usepackage[a4paper, total={8in, 10in}]{geometry}
-
-
 \usepackage[utf8]{inputenc}
 \usepackage{amsmath}
 \usepackage{amsfonts}
 \usepackage{amssymb}
 \usepackage{booktabs}
+
 \begin{document}
 
 \section{Slide \textit{'hardware-insights'}}
@@ -813,58 +811,44 @@ If the NT flag (EFLAGS register) is cleared, the \texttt{iret} instruction perfo
 \newpage
 \section{Slide '\textit{virtual-file-system}'}
 
-The \textbf{Virtual File-system} (also known as \textbf{Virtual File-system Switch} or \textbf{VFS}) is a kernel software layer that handles all system calls related to a standard Unix file-system. 
+The \textbf{Virtual File-system} (also known as \textbf{Virtual File-system Switch} or \textbf{VFS}) is a kernel \textbf{software layer that handles all system calls related to a standard Unix file-system}. 
 
+Linux VFS is capable to manage several kind of file-systems. Any file-system object, like file or directories, \textbf{is represented in RAM via specific data structures which are managed by any overlying kernel layer in a File System independent manner} (\textit{FS independent part}). However, \textbf{each specific file-system implementation must translate its physical organization into the VFS’s common file model}: it is possible \textbf{using a pointer for each operation}; the pointer is made to point to the proper function for the particular file-system being accessed (\textit{FS dependent part}).
 
-The key idea behind the VFS consists of introducing a common file model capable of representing all supported filesystems
+\textit{You can think of the common file model as object-oriented, where an object is a software construct that defines both a data structure and the methods that operate on it} (although Linux is not written using any object-oriented language.)
 
-More essentially, the Linux kernel cannot hardcode a particular function to handle an operation such as read( ) or ioctl( ). Instead, it must use a pointer for each operation; the pointer is made to point to the proper function for the particular file-system being accessed.
+\subsection{Data Structure}
 
+To be able to manage a file system type we need several suitable data structure, which includes both the \textbf{object attributes} and a pointer to a table of \textbf{object methods}.
+
+VFS's data structure are:
 
 \begin{center}
-\begin{tabular}{lr} 
+\begin{tabular}{l|p{13cm}} 
 \toprule
  
-\textbf{Superblock Object} &  \\ 
+\textbf{Superblock Object} & Stores information concerning a mounted file-system. For disk-based file-systems, \textbf{this object usually corresponds to a file-system control block stored on disk}.\\\\
 
-\textbf{Inode Object} & \\
+\textbf{Inode Object} & Stores general all functions and informations about a specific file. For disk-based file-systems, this
+object usually corresponds to a \textit{file control block} stored on disk. Each inode object is associated with an inode number, which uniquely identifies the file within the file-system. 
 
-\textbf{File Object} & \\
+\textit{A filename is a casually assigned label that can be changed, but the inode is unique to the file and remains the same as long as the file exists.} 
 
-\textbf{Dentry Object} & \\
+\\\\
 
+\textbf{File Object} & Stores information about the interaction between an open file and a process.
+This information exists only in kernel memory during the period when a process has the file open.
 
-\bottomrule
-\end{tabular}
-\end{center}
+\\\\
 
-\subsubsection{Filesystem Handling}
+\textbf{Dentry Object} & Stores information about the linking of a directory entry (that is, a particular
+name of the file) with the corresponding file.
 
-Linux makes use of a system's \textbf{root file-system} \textit{which is directly mounted by the kernel during the booting phase and that holds the system initialization scripts and the most essential system programs}.
+VFS considers each directory a file that contains a list of files and other directories. Once a directory entry is read into memory, it is transformed by the VFS into a dentry object based on the dentry structure.
 
-The directory on which a file-system is mounted is called the \textbf{mount point}. (\textit{remember that the root directory of a mounted file-system hides the content of the mount point directory of the parent file-system, as well as the whole subtree of the parent file-system below the mount point}.)
+\textbf{The kernel creates a dentry object for every component of a pathname that a process looks up}.
+\\\\
 
-Is possible to mount the same file-system several times and, if it is mounted $n$ times, its root directory can be accessed
-through $n$ mount points, one per mount operation. Although the same file-system can be accessed by using different mount points, there is only one superblock object for all of them, no matter of how many times it has been mounted.
-
-For each mount operation, the kernel must save in memory several information, like the mount point, the mount flags or the relationships between the file-system to be mounted and the other mounted file-systems. Such information is stored in a mounted file-system descriptor of type \texttt{struct vfsmount}. 
-
-The \texttt{struct vfsmount} data structure, which from Linux kernel 4.8 is flagged with the \texttt{\_\_randomize\_layout} annotation, has several fields including:
-
-\begin{center}
-\begin{tabular}{l|l|p{13cm}} 
-
-\toprule
-Type & Field & Description \\
-\midrule
-
-\texttt{struct vfsmount *} & \texttt{mnt\_parent} & Points to the parent file-system on which this file-system is mounted.\\
-\texttt{char *} & \texttt{mnt\_devname} & Device file-name.\\
-\texttt{struct list\_head} & \texttt{mnt\_mounts} & Head of a list including all file-system descriptors mounted on directories of this filesystem. \\
-\texttt{struct list\_head} & \texttt{mnt\_child} & Pointers for the \texttt{mnt\_mounts} list of mounted file-system descriptors. \\
-\texttt{struct namespace *} & \texttt{mnt\_namespace} & Pointer to the name-space of the process that mounted the file-system. \\
-\texttt{struct super\_block *} & \texttt{mnt\_sb} & Points to the super-block object of this file-system.\\
-\texttt{int} & \texttt{mnt\_flags} & Flags that specify how some kinds of files in the mounted file-system are handled. For instance \texttt{MNT\_NOEXEC} flag is used to disallow program execution in the mounted file-system.\\
 
 \bottomrule
 \end{tabular}
@@ -872,7 +856,7 @@ Type & Field & Description \\
 
 \subsubsection{Superblock}
 
-\textbf{The superblock object is used to store information concerning a mounted file-system}. All superblock objects \textbf{are stored in a circular doubly linked list} where the first element of this list is represented by the \texttt{super\_blocks} variable. A superblock is represented by a \texttt{super\_block} struct whose fields are described in following table:
+All superblock objects \textbf{are stored in a circular doubly linked list} where the first element of this list is represented by the \texttt{super\_blocks} variable. A super-block is represented by a \texttt{super\_block} struct whose fields are described in following table:
 
 \begin{center}
 \begin{tabular}{l|l|p{13cm}} 
@@ -903,9 +887,44 @@ Generally all superblock operation implementations are provided by all possible 
 \end{tabular}
 \end{center}
 
+
+\subsubsection{dentry}
+
+Usually dentry objects have no corresponding image on disk, and hence no field is included in the dentry structure to specify that the object has been modified. Dentry objects are stored in a slab allocator cache whose descriptor is \texttt{dentry\_cache}; 
+
+\begin{center}
+\begin{tabular}{l|l|p{13cm}} 
+
+\toprule
+Type & Field & Description \\
+\midrule
+
+\texttt{struct inode *} & \texttt{d\_inode} & Inode associated with filename. 
+
+\\
+
+
+\texttt{struct dentry *} & \texttt{d\_parent} & Dentry object of parent directory. 
+
+\\
+\texttt{struct qstr} & \texttt{d\_name} & Filename. 
+
+\\
+\texttt{struct list\_head} & \texttt{d\_child} & For directories, pointers for the list of directory dentries in the same parent directory.
+
+\\
+\texttt{struct dentry\_operations*} & \texttt{d\_op} & The methods associated with a dentry object are called \textit{dentry operations}. Although some file-systems define their own dentry methods, the fields are usually NULL and the VFS replaces them with default functions (like \texttt{d\_delete(dentry)}, \texttt{d\_compare(dir, name1, name2)}). 
+
+\\
+
+\bottomrule
+\end{tabular}
+\end{center}
+
+
 \subsubsection{Inode}
 
-\textbf{All information needed by the file-system to handle a file is included in a data structure called an \texttt{inode}}. \textit{A filename is a casually assigned label that can be changed, but the inode is unique to the file and remains the same as long as the file exists.} An inode object is represented by the \texttt{inode struct}:
+An inode object is represented by the \texttt{inode struct}:
 
 \begin{center}
 \begin{tabular}{l|l|p{13cm}} 
@@ -934,6 +953,107 @@ Type & Field & Description \\
 
 
 
+\subsection{File-systems}
+
+In Linux, \textit{the code for a file-system actually may either be included in the kernel image or dynamically loaded as a module}. To handle all file-systems, VFS represents them as a \texttt{struct file\_system\_type} object, which is used to hold both \textbf{all file-system specific informations} and a \textbf{pointer to a function to be executed upon mounting the file system in order to read the super-block}.
+
+\begin{center}
+\begin{tabular}{l|l|p{13cm}} 
+
+\toprule
+Type & Field & Description \\
+\midrule
+
+\texttt{const char *} & \texttt{name} & File-system name\\\\
+
+\texttt{struct super\_block * (*)( )} & \texttt{get\_sb} & Method for reading a super-block. (Be aware that in newer kernel versions this field is called \texttt{mount}) \textbf{This is a file-system-type-dependent function that allocates a new super-block object and initializes it} (if necessary, by reading a disk when we manage a disk-based device).
+
+\textbf{Generally this function relies on a block-device driver of a device to instantiate the corresponding file system super-block in memory}. But be aware that if we use a RAM file systems, there is no need to read 
+from a device, therefore this function is limited to in-memory instantiation of a fresh superblock.\\\\
+
+\bottomrule
+\end{tabular}
+\end{center}
+
+All file-system-type objects are inserted into a singly linked list according to which the \texttt{file\_systems} variable points to the first item. A spin lock called \texttt{file\_systems\_lock} protects the whole list against concurrent accesses.
+
+During system initialization, the \texttt{register\_filesystem()} function is invoked for every filesystem specified at compile time, inserting corresponding \texttt{file\_system\_type} object into the aforementioned list.
+
+The \texttt{register\_filesystem()} function is also invoked when a module implementing a file-system is loaded. In this case, the file-system may also be unregistered (by invoking the \texttt{unregister\_filesystem()} function) when the module is unloaded.
+
+\subsubsection{Filesystem Mounting}
+
+The directory on which a file-system is mounted is called the \textbf{mount point}. (\textit{remember that the root directory of a mounted file-system hides the content of the mount point directory of the parent file-system, as well as the whole sub-tree of the parent file-system below the mount point}.)
+
+Is possible to mount the same file-system several times and, if it is mounted $n$ times, its root directory can be accessed through $n$ mount points, one per mount operation. \textbf{Although the same file-system can be accessed by using different mount points, there is only one super-block object for all of them, no matter of how many times it has been mounted.}
+
+For each mount operation, the kernel must save in memory several information, like the mount point, the mount flags or the relationships between the file-system to be mounted and the other mounted file-systems. \textbf{Such informations are stored in a mounted file-system descriptor of type \texttt{struct vfsmount}}.
+
+The \texttt{struct vfsmount} data structure, which from Linux kernel 4.8 is flagged with the \texttt{\_\_randomize\_layout} annotation, has several fields including:
+
+\begin{center}
+\begin{tabular}{l|l|p{13cm}} 
+
+\toprule
+Type & Field & Description \\
+\midrule
+
+\texttt{struct vfsmount *} & \texttt{mnt\_parent} & Points to the parent file-system on which this file-system is mounted.\\
+\texttt{char *} & \texttt{mnt\_devname} & Device file-name.\\
+\texttt{struct list\_head} & \texttt{mnt\_mounts} & Head of a list including all file-system descriptors mounted on directories of this filesystem. \\
+\texttt{struct list\_head} & \texttt{mnt\_child} & Pointers for the \texttt{mnt\_mounts} list of mounted file-system descriptors. \\
+\texttt{struct namespace *} & \texttt{mnt\_namespace} & Pointer to the name-space of the process that mounted the file-system. \\
+\texttt{struct super\_block *} & \texttt{mnt\_sb} & Points to the super-block object of this file-system.\\
+\texttt{int} & \texttt{mnt\_flags} & Flags that specify how some kinds of files in the mounted file-system are handled. For instance \texttt{MNT\_NOEXEC} flag is used to disallow program execution in the mounted file-system.\\
+
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsubsection{\texttt{rootfs}}
+
+Linux makes use of a system's \textbf{root file-system} (\texttt{rootfs}) \textit{which is directly mounted by the kernel during the booting phase and that holds the system initialization scripts and the most essential system programs}. The \texttt{file\_system\_type} struct keeps meta-data for \texttt{rootfs} is allocated and initialized statically thorough \texttt{init\_rootfs()} function within \texttt{fs/ramfs/inode.c}.
+
+\subsubsection{The VFS startup and \texttt{rootfs} mounting}
+
+VFS is initialized by Linux through \texttt{vfs\_caches\_init()} function which is a crucial to mount \texttt{rootfs} and all other required file-systems. (\textit{However, in principles, the Linux kernel could be configured such in a way to support no file-system. In this case, any task to be executed needs to be coded within the kernel}).
+
+Mounting process is performed by the following functions (invoked by \texttt{vfs\_caches\_init()}):
+
+\begin{description}
+\item[\texttt{init\_rootfs()}] function registers the special file-system type \textit{rootfs} by setting a \texttt{struct file\_system\_type} variable called \texttt{rootfs\_fs\_type}.
+\item[\texttt{init\_mount\_tree()}] This function executes the following operations:
+
+\begin{enumerate}
+
+\item The \texttt{do\_kern\_mount()} function is invoked passing to it the string "rootfs" as filesystem type; \textbf{this function checks the file-system type flags to determine how the mount operation is to be done}. \texttt{do\_kern\_mount()} (\textbf{it is used to mount generic file-systems}) performs several operations like:
+\begin{itemize}
+\item execute the file-system-dependent function to allocate a new super-block and to initialize it (invoking \texttt{get\_sb} function).
+\item Initializes the dentry object corresponding to the root directory of the filesystem, and increases the usage counter of the dentry object (\texttt{mnt\_root} field is used)
+\item Initializes the name-space field with the name-space of the current process (that is \texttt{mnt->mnt\_namespace} field is set with the value in \texttt{current->namespace}.) (not done when initialize \texttt{rootfs})
+\end{itemize}
+
+Finally, \texttt{do\_kern\_mount()} function returns a the address of the mounted filesystem descriptor, 
+
+\item Allocates and initialize a \texttt{namespace} object for the namespace of process 0, and inserts into it the mounted file-system descriptor previously allocated. During system initialization, the name-space field of every other process in the system is set to the address of the namespace object of process 0 (\textbf{By default, all processes share the same, initial namespace}) (it is also initialized the \texttt{namespace->count} usage counter).
+
+\item Sets the root directory and the current working directory of process $0$ (the idle process) to the root filesystem using \texttt{set\_fs\_pwd()} and \texttt{set\_fs\_root()} function.
+
+\end{enumerate}
+\end{description}
+
+\subsubsection{Namespaces}
+
+\textbf{The list of mount points along directory tree is called name-space}. \textit{In Linux, every process might have its own tree of mounted file-systems, that is the so called name-space of the process}.
+
+Usually most processes share the same name-space, which is the tree of mounted file-systems that is rooted at the system's root file-system and that is used by the \texttt{init} process. 
+
+However, a process gets a new name-space if it is created by the \texttt{clone()} system call with the \texttt{CLONE\_NEWNS} flag set. 
+
+If a parent process creates a child process without the \texttt{CLONE\_NEWNS} flag, its names-pace is inherited by its children.
+
+\textbf{When a process mounts or unmounts a file-system, it only modifies its names-pace}. Therefore, the change is visible to all processes that share the same name-space, and only to them (except if the mount operation is tagged with SHARED).
+
 
 \subsubsection{Structure randomization}
 
@@ -948,47 +1068,9 @@ To get structure randomization working in the kernel, the structures marked for 
 Naturally, \textbf{compiler support is necessary to get this feature to work}. Since Linux kernel 4.8, this plug-in is been used.
 
 
-\subsubsection{Mounting the Root Filesystem}
+\subsection{Relationship with processes}
 
-Mounting the root filesystem is a crucial part of system initialization which is performed by the following functions:
-
-\begin{description}
-\item[\texttt{init\_rootfs()}] function registers the special file-system type \textit{rootfs} by properly populing a \texttt{struct file\_system\_type} variable called \texttt{rootfs\_fs\_type}.
-\item[\texttt{init\_mount\_tree()}] This function executes the following operations:
-
-\begin{enumerate}
-
-\item Using the \texttt{do\_kern\_mount()} function, passing to it the string "rootfs" as filesystem type, is possible to retrieve the address of the mounted filesystem descriptor. THis function invokes the \texttt{get\_sb} method of the rootfs filesystem previously discussed returning the address of the newly allocated superblock.
-
-\item Allocates a namespace object for the namespace of process 0, and inserts into it the mounted filesystem descriptor prevously allocated:
-
-\item Sets the namespace field of every other process in the system to the address of the namespace object;
-
-
-
-\item Sets the root directory and the current working directory of process $0$ (the idle process) to the root filesystem using \texttt{set\_fs\_pwd()} and \texttt{set\_fs\_root()} function.
-
-
-\end{enumerate}
-\end{description}
-
-\subsubsection{Namespaces}
-
-The list of mount points along directory tree is called \textbf{name-space}. Initially there is only one tree of mounted filesystems and each process can potentially access every file in a
-mounted filesystem by specifying the proper pathname. In Linux, every process might have its own tree of mounted filesystems, that is the so called namespace of the process.
-
-
-Usually most processes share the same namespace, which is the tree of mounted file-systems that is rooted at the system’s root filesystem and that is used by the init process. 
-
-However, a process gets a new namespace if it is created by the \texttt{clone()} system call with the \texttt{CLONE\_NEWNS} flag set. The new names-pace is then inherited by children pro-
-cesses if the parent creates them without the \texttt{CLONE\_NEWNS} flag.
-
-When a process mounts or unmounts a filesystem, it only modifies its namespace. Therefore, the change is visible to all processes that share the same namespace, and only to them. A process can even change the root filesystem of its namespace by using the Linux-specific \texttt{pivot\_root()} system call. (except if the
-mount operation is tagged with SHARED)
-
-\subsubsection{Relationship with processes}
-
-to represent the interactions between a process and a filesystem, Linux use the \texttt{fs\_struct} data structure (defined in \texttt{include/fs\_struct.h}), and each process descriptor has an \texttt{fs} field that points to the process \texttt{fs\_struct} structure. Some \texttt{fs\_struct} fields are described below:
+To represent the interactions between a process and a filesystem, Linux use the \texttt{fs\_struct} data structure (defined in \texttt{include/fs\_struct.h}), and each process descriptor has an \texttt{fs} field that points to the process \texttt{fs\_struct} structure. Some \texttt{fs\_struct} fields are described below:
 
 \begin{center}
 \begin{tabular}{l|l|p{13cm}} 
@@ -1075,6 +1157,28 @@ The inodes representing device files, have an identifier which consists of a pai
 In x86 machines, device numbers are represented as bit masks stored into \texttt{kdev\_t i\_rdev} field of \texttt{struct inode}. In particular, major number corresponds to the least significant byte within the mask, while the minor correspond to second least significant byte. The macro \texttt{MKDEV(ma,mi)} (defined in \texttt{include/linux/kdev\_t.h}), can be used to setup a correct bit mask by starting from the two numbers.
 
 The \texttt{mknod()} system call is used to create device files. It receives the name of the device file, its type, and the major and minor numbers as its parameters. Device files are usually included in the \texttt{/dev} directory.
+
+
+\subsubsection{\texttt{procfs}}
+
+The \texttt{proc} file-system is a \textbf{pseudo-file-system} provided by the Linux kernel which is \textbf{designed to allow User Mode applications to access kernel internal data structures}, exporting information about various kernel subsystems, hardware devices, and associated device drivers \textbf{via common I/O operations on virtual files}. It is automatically mounted at \texttt{/proc}. 
+
+\texttt{/proc} includes non-process-related system informations like:
+
+\begin{description}
+\item[\texttt{cpuinfo}] contains information about the processor at boot time.
+\item[\texttt{meminfo}] contains information about the memory usage.
+\item[\texttt{version}] contains the kernel version information.
+\item[\texttt{kcore}] contains the entire RAM contents as seen by the kernel
+\end{description}
+
+
+
+
+
+
+
+
 
 \subsection{\texttt{sysfs}}
 
