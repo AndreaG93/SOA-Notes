@@ -6,8 +6,15 @@
 \usepackage{amsfonts}
 \usepackage{amssymb}
 \usepackage{booktabs}
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=black,bookmarksopen=true]{hyperref}
+
+\usepackage{bookmark}
+
 
 \begin{document}
+
+\tableofcontents
+\newpage
 
 \section{Slide \textit{'hardware-insights'}}
 
@@ -1234,7 +1241,7 @@ For assigning a range of device numbers to a character device driver, is possibl
 
 
 
-\subsubsection{\texttt{procfs}}
+\subsection{\texttt{procfs}}
 
 The \texttt{proc} file-system is a \textbf{pseudo-file-system} provided by the Linux kernel which is \textbf{designed to allow User Mode applications to access kernel internal data structures}, exporting information about various kernel subsystems, hardware devices, and associated device drivers \textbf{via common I/O operations on virtual files}. It is automatically mounted at \texttt{/proc}. 
 
@@ -1247,18 +1254,9 @@ The \texttt{proc} file-system is a \textbf{pseudo-file-system} provided by the L
 \item[\texttt{kcore}] contains the entire RAM contents as seen by the kernel
 \end{description}
 
-
-
-
-
-
-
-
-
 \subsection{\texttt{sysfs}}
 
-sysfs is a \textbf{pseudo file-system} provided by the Linux kernel, \textbf{designed to allow User Mode applications to access kernel internal data structures}, exporting information and allowing the configuration of various kernel subsystems, hardware devices, and associated device drivers \textbf{through virtual files}via common I/O operations. \texttt{sysfs} is compiled into the kernel by default depending on the configuration option \texttt{CONFIG\_SYSFS} (visible only if \texttt{CONFIG\_EMBEDDED} is set).
-
+sysfs is a \textbf{pseudo file-system} similar to \texttt{proc}. \texttt{sysfs} is compiled into the kernel by default depending on the configuration option \texttt{CONFIG\_SYSFS} (visible only if \texttt{CONFIG\_EMBEDDED} is set).
 
 A goal of the sysfs filesystem is to expose the hierarchical relationships among the components of the device driver model. 
 \begin{itemize}
@@ -1268,9 +1266,6 @@ ers and devices.
 \item The related top-level directories of this filesystem are used to represent several kernel object like block, device, bus and so on.
 
 \end{itemize}
-
-fdsfdsfdsfdsfds
-
 
 
 \end{document}
