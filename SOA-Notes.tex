@@ -172,6 +172,17 @@ The \textbf{Kernel page-table isolation} (\textbf{KPTI}), previously called \tex
 
 \textbf{Whenever a process is running in user mode, the shadow page tables will be active}. \textit{The kernel's address space is therefore completely hidden from the process, defeating the known hardware-based attacks. Whenever the system needs to switch to kernel mode, in response to a system call, an exception, or an interrupt, for example, a switch to the other page tables will be made. The code that manages the return to user space must then make the shadow page tables active again.}
 
+\subsection{Total Store Order (TSO)}
+
+The \textbf{Total Store Order} (\textbf{TSO}) is a relaxed consistency models according to which the constraint $W->R$ is relaxed, that is, \textit{rather than waiting for the write to become visible, a write is simply place into an on-core write buffer called \textbf{store buffer}}.
+
+At some time in the future, when it is ``\textit{more convenient}'', \textit{the cache hierarchy will pull the write from the store buffer and propagate it through the caches so that it becomes visible to other threads.}
+
+\textbf{The store buffer allows us to hide the write latency that would usually be required to make write visible to all the other threads.}
+
+In other words, this model requires that all writes appear to occur in a total order, \textbf{but allows a processor's reads to pass its own writes}. \textit{A read can just inspect the store buffer directly, see that it contains a write to the location it's reading, and use that value instead.}
+
+
 \newpage
 \section{Slide \textit{'kernel-programming-basics'}}
 
