@@ -1070,7 +1070,9 @@ Naturally, \textbf{compiler support is necessary to get this feature to work}. S
 
 \subsection{Relationship with processes}
 
-To represent the interactions between a process and a filesystem, Linux use the \texttt{fs\_struct} data structure (defined in \texttt{include/fs\_struct.h}), and each process descriptor has an \texttt{fs} field that points to the process \texttt{fs\_struct} structure. Some \texttt{fs\_struct} fields are described below:
+To represent the interactions between a process and a file-system, Linux use the \texttt{fs\_struct} data structure (defined in \texttt{include/fs\_struct.h}), and \textbf{each process descriptor has an \texttt{fs} field} that points to the process \texttt{fs\_struct} structure. 
+
+Some \texttt{fs\_struct} fields are described below:
 
 \begin{center}
 \begin{tabular}{l|l|p{13cm}} 
@@ -1105,7 +1107,7 @@ Type & Field & Description \\
 
 In Linux 3.xx/4.7, the \texttt{fs\_struct} data structure is slightly different: the \texttt{root} and \texttt{pwd} fields are now of \texttt{struct path} type. From kernel 4.8, this data structure is flagged as \texttt{\_\_randomize\_layout}.
 
-The \texttt{files\_struct} data structure represents a table, whose address is contained in the \texttt{files} field of the process descriptor, used to specify which files are currently opened by the process. Some of their fields are described below:
+The \texttt{files\_struct} data structure represents the \textbf{file descriptor table}, whose address is contained in the \texttt{files} field of the process descriptor, used to specify which files are currently opened by the process (\textit{is also said that this table builds a relation between an I/O channel (a numerical ID code, used as a key) and an I/O object}). Some fields are:
 
 \begin{center}
 \begin{tabular}{l|l|p{13cm}} 
@@ -1118,7 +1120,7 @@ Type & Field & Description \\
 
 \\
 
-\texttt{struct file **} & \texttt{fd} & Pointer to array of file object pointers. The size of the array is stored in the \texttt{max\_fds} field. 
+\texttt{struct file **} & \texttt{fd} & Pointer to array of \texttt{struct file} object pointers. The size of the array is stored in the \texttt{max\_fds} field. 
 
 For every file with an entry in the \texttt{fd} array, the array index is the \textit{file descriptor}. Usually, the first element (index 0) of the array is associated with the \textbf{standard input} of the process, the second with the \textbf{standard output}, and the third with the \textbf{standard error}.
 
@@ -1128,25 +1130,55 @@ A process cannot use more than \texttt{NR\_OPEN} (usually $1048576$) file descri
 
 \texttt{fd\_set *} & \texttt{open\_fds} & Pointer to open file descriptors.
 
-
-
-
 \\
  
 \bottomrule
 \end{tabular}
 \end{center}
 
-\subsubsection{Device Files}
+We said that the file descriptor table contains a pointer to an array of \texttt{struct file} objects.
+A \texttt{file} object (\textit{the session data of the file descriptor table}) describes how a process interacts with a file it has opened and it is created when the file is opened. \textit{Notice that file objects have no corresponding image on disk}. (in newer version of kernel, \texttt{file} data structure is flagged with \texttt{\_\_randomize\_layout} annotation) \texttt{file} fields are:
 
-I/O devices are treated as special files called \textbf{device files}; thus, the same system calls used to interact with regular files on disk can be used to directly interact with I/O devices. device files can be of two types: 
+\begin{center}
+\begin{tabular}{l|l|p{13cm}} 
+
+\toprule
+Type & Field & Description \\
+\midrule
+
+
+\texttt{struct dentry *} & \texttt{f\_dentry} & dentry object associated with the file.
+
+\\
+\texttt{struct file\_operations *} & \texttt{f\_op} & Pointer to file operation table.
+
+\\
+\texttt{atomic\_t} & \texttt{f\_count} & File object’s reference counter which counts the number of
+processes that are using the file object. 
+
+\\
+\texttt{mode\_t} & \texttt{f\_mode} & Process access mode.
+
+\\
+\texttt{loff\_t} & \texttt{f\_pos} & Current file offset (file pointer).
+
+\\ 
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Device Files}
+
+Unix-like operating systems are based on the notion of a file. This is true also for I/O devices which are treated as special files called \textbf{device files}; \textbf{thus, the same system calls used to interact with regular files on disk can be used to directly interact with I/O devices}. 
+
+Device files can be of two types: 
 
 \begin{description}
 \item[Block Device] In this devices type, the data can be addressed randomly, and the time needed to transfer a data block is small and roughly the same.
 \item[Char Device] The data of a character device either cannot be addressed randomly, or they can be addressed randomly, but the time required to access a random datum largely depends on its position inside the device.
 \end{description} 
 
-The inodes representing device files, have an identifier which consists of a pair of numbers. 
+A device file is usually a real file which inode \textbf{includes an identifier of the hardware device corresponding to the character or block device file}. This identifier consists of a pair of numbers:
 
 \begin{description}
 
@@ -1156,7 +1188,50 @@ The inodes representing device files, have an identifier which consists of a pai
 
 In x86 machines, device numbers are represented as bit masks stored into \texttt{kdev\_t i\_rdev} field of \texttt{struct inode}. In particular, major number corresponds to the least significant byte within the mask, while the minor correspond to second least significant byte. The macro \texttt{MKDEV(ma,mi)} (defined in \texttt{include/linux/kdev\_t.h}), can be used to setup a correct bit mask by starting from the two numbers.
 
-The \texttt{mknod()} system call is used to create device files. It receives the name of the device file, its type, and the major and minor numbers as its parameters. Device files are usually included in the \texttt{/dev} directory.
+The \texttt{mknod()} system call is used to create device files. It receives the name of the device file, its type (\texttt{S\_IFREG}, \texttt{S\_IFCHR}, \texttt{S\_IFBLK}, \texttt{S\_IFIFO}), and the major and minor numbers as its parameters. Device files are usually included in the \texttt{/dev} directory.
+
+Usually, a device file is associated with a hardware device (such as a hard disk) or with some physical or logical portion of a hardware device.
+
+\subsubsection{Device Drivers}
+
+\textbf{A device driver is the set of kernel routines that makes a hardware device respond to the programming interface defined by the canonical set of VFS functions that control a device} (that is \texttt{open}, \texttt{write}, \texttt{read} and so on...) 
+
+\textit{The actual implementation of all these functions is delegated to the device driver. Because each device has a different I/O controller, and thus different commands and different state information, most I/O devices have their own drivers}.
+
+Each system call issued on a device file is translated by the kernel into an invocation of a suitable function of a corresponding device driver. \textbf{To achieve this, a device driver must register itself}. In other words, registering a device driver means allocating a new \texttt{device\_driver} descriptor.
+
+A \textbf{character device driver} is described by a \texttt{cdev} structure, whose main fields are:
+
+\begin{center}
+\begin{tabular}{l|l|p{13cm}} 
+
+\toprule
+Type & Field & Description \\
+\midrule
+
+
+\texttt{dev\_t} & \texttt{dev} & Initial major and minor numbers assigned to the device driver.
+
+\\ 
+\texttt{struct file\_operations *} & \texttt{ops} & Pointer to the file operations table of the device driver.
+
+\\
+\texttt{struct list\_head} & \texttt{list} & Head of the list of inodes relative to device files for this character device
+
+\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+To keep track of which character device numbers are currently assigned, the kernel uses a hash table \texttt{chrdevs}, which contains intervals of device numbers. \textbf{Two intervals may share the same major number, but they cannot overlap, thus their minor numbers should be all different}.
+
+The table includes up to 255 entries every of which points to the first element of a collision list ordered by increasing major and minor numbers.
+
+For assigning a range of device numbers to a character device driver, is possible to use both the \texttt{register\_chrdev\_region()} function, which assigns an arbitrary range of device numbers (\textit{it receives as its parameters the requested major number major, the name of the device driver name, and a pointer to a table of file operations specific to the character device files in the interval}), and the \texttt{register\_chrdev()} function which assigns a fixed interval of device numbers including a single major number and minor numbers from 0 to 255 (\textit{it receives as its parameters the requested major number major, the name of the device driver name, and a pointer to a table of file operations specific to the character device files in the interval.})
+
+
+
+
 
 
 \subsubsection{\texttt{procfs}}
