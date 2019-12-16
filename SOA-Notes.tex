@@ -7,9 +7,21 @@
 \usepackage{amssymb}
 \usepackage{booktabs}
 \usepackage[colorlinks=true,linkcolor=blue,urlcolor=black,bookmarksopen=true]{hyperref}
-
 \usepackage{bookmark}
+\usepackage{listings}
+\usepackage{xcolor}
 
+\lstset{
+language=C,
+basicstyle=\small\ttfamily,			
+keywordstyle=\color{blue},
+commentstyle=\color{gray},			
+stringstyle=\color{black},			
+numbers=left,						
+numberstyle=\tiny,					
+stepnumber=1,						
+breaklines=true						
+}
 
 \begin{document}
 
@@ -743,10 +755,32 @@ When looking for a new process to run on a CPU, the kernel has to consider only 
 Processes are dynamic entities, whose lifetimes range from a few milliseconds to months, \textbf{therefore process descriptors are stored in dynamic memory rather than in the memory area permanently assigned to the kernel}. For each process, \textbf{Linux packs two different data structures in a single per-process memory area}:
 \begin{itemize}
 \item a small data structure linked to the process descriptor, namely the \texttt{thread\_info} structure.
-\item Kernel Mode process stack and the length of this memory area is usually 8,192 bytes (8 KB) (stored in two consecutive page frames with the first page frame aligned to a multiple of $2^13$).
+\item Kernel Mode process stack and the length of this memory area is usually 8,192 bytes (8 KB) (\textbf{stored in two consecutive page frames with the first page frame aligned to a multiple of $2^13$}).
 \end{itemize}
 
-The \texttt{thread\_info} structure resides at the beginning of the memory area, and the stack grows downward from the end. The growth of the stack size may lead to buffer overflow risks, if the stack size is not rescaled and memory fragmentation, if the stack size is rescaled
+\textbf{The \texttt{thread\_info} structure resides at the beginning of the memory area, and the stack grows downward from the end}. The growth of the stack size may lead to buffer overflow risks, if the stack size is not rescaled and memory fragmentation, if the stack size is rescaled
+
+The C language allows the \texttt{thread\_info} structure and the kernel stack of a process to be conveniently represented by means of the following union construct:
+
+
+\begin{lstlisting}[frame=lines]
+union thread_union {
+    struct thread_info thread_info;
+    unsigned long stack[2048]; /* 1024 for 4KB stacks */
+};
+\end{lstlisting}
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 \newpage
