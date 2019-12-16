@@ -172,12 +172,6 @@ The \textbf{Kernel page-table isolation} (\textbf{KPTI}), previously called \tex
 
 \textbf{Whenever a process is running in user mode, the shadow page tables will be active}. \textit{The kernel's address space is therefore completely hidden from the process, defeating the known hardware-based attacks. Whenever the system needs to switch to kernel mode, in response to a system call, an exception, or an interrupt, for example, a switch to the other page tables will be made. The code that manages the return to user space must then make the shadow page tables active again.}
 
-
-
-
-
-
-
 \newpage
 \section{Slide \textit{'kernel-programming-basics'}}
 
