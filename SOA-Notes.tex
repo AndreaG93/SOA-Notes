@@ -154,6 +154,30 @@ To perform any operation, the processor simply \textbf{acquires} bus access and 
 When we perform a read, we also need to locate a data item when a cache miss occurs. In a \textbf{write-through cache}, it is easy to find the recent value of a data item, \textit{since all written data are always sent to the memory, from which the most recent value of a data item can always be fetched} (using write through simplifies the implementation of cache coherence). For a \textbf{write-back cache}, the problem of finding the most recent data value is
 harder, since the most recent value of a data item can be in a cache rather than in memory (the CPU must get data from another cache)
 
+
+
+\subsection{Countermeasures for Meltdown}
+
+The \textbf{KASLR} (Kernel Address Space Randomization) is security technique capable to hinders some types of security attacks involving memory. 
+
+In order to prevent an attacker from accessing to kernel data stored in kernel address space, \textbf{KASLR able us to running Linux kernel images by randomizing where the kernel code is placed at boot time}. This feature was merged into the Linux kernel starting from version 3.14. It can be disabled at boot time by specifying \texttt{nokaslr} as kernel's boot parameters. \textit{However exists a maximum shift we can apply on the logical kernel image (40 bit in Linux Kernel 4.12, enabled by default) therefore KASLR is weak against brute force attacks}.
+
+The \textbf{Kernel page-table isolation} (\textbf{KPTI}), previously called \textbf{KAISER} (\textit{Kernel Address Isolation to have Side-channels Efficiently Removed}), is a feature, merged into Linux kennel starting from version 4.15, \textbf{that mitigates the Meltdown security vulnerability affecting x86 CPUs based on a better isolation of user space and kernel space memory}.
+
+\textbf{The key idea is use two set of page table}:
+\begin{itemize}
+\item One set of page tables includes both kernel-space and user-space addresses same as before, but it is only used when the system is running in kernel mode.
+\item The second set of page tables, usually called as \textit{shadows}, \textbf{contains a copy of all of the user-space mappings but leaves out the kernel side}. However a minimal set of kernel-space mappings that provides the information needed to handle system calls and interrupts are used. This set is intended to be used in user mode. Copying the page tables may sound inefficient, but the copying only happens at the top level of the page-table hierarchy.
+\end{itemize}
+
+\textbf{Whenever a process is running in user mode, the shadow page tables will be active}. \textit{The kernel's address space is therefore completely hidden from the process, defeating the known hardware-based attacks. Whenever the system needs to switch to kernel mode, in response to a system call, an exception, or an interrupt, for example, a switch to the other page tables will be made. The code that manages the return to user space must then make the shadow page tables active again.}
+
+
+
+
+
+
+
 \newpage
 \section{Slide \textit{'kernel-programming-basics'}}
 
