@@ -701,31 +701,13 @@ On the x86 architecture, the kernel must explicitly interact with several kinds 
 As said these timer circuits issues special interrupts called \textbf{timer interrupt}, which notifies the kernel
 that one more time interval has elapsed. Interrupts can both involve a specific CPU (CPU local timer interrupt signals timekeeping activities related to the local CPU, such as monitoring how long the current process has been running and updating the resource usage statistics) or signal activities not related to a specific CPU, such as handling of software timers and keeping the system time up-to-date.
 
-\subsection{Preemption}
 
-As a general definition a kernel is \textit{preemptive} \textbf{if a process switch may occur while the replaced process is executing a kernel function, that is, while it runs in Kernel Mode}. 
-
-\textbf{Kernel pre-emption is disabled when the \texttt{preempt\_count} field in the \texttt{thread\_info} descriptor referenced by the \texttt{current\_thread\_info()} macro \textbf{is greater than zero}}. Linux provides several APIs to manage kernel pre-emption:
-\begin{description}
-\item[\texttt{preempt\_count()}] Return the \texttt{preempt\_count} field in the \texttt{thread\_info} descriptor.
-\item[\texttt{preempt\_disable()}] Increases by one the value of the preemption counter.
-\item[\texttt{preempt\_enable\_no\_resched()}] Decreases by one the value of the preemption counter.
-\item[\texttt{preempt\_enable()}] Decreases by one the value of the preemption counter, and invokes \texttt{preempt\_schedule()} if the \texttt{TIF\_NEED\_RESCHED} flag in the \texttt{thread\_info} descriptor is set
-\end{description}
-
-But there are other two very important API and they are related to \textbf{per-CPU variables}. 
-
-Remember that a \textbf{\textit{per-CPU variables} is an array of data structures, one element per each CPU in the system}. A CPU should not access the elements of the array corresponding to the other CPUs; on the other hand, it can freely read and modify its own element without fear of race conditions, because it is the only CPU entitled to do so. \textbf{While per-CPU variables provide protection against concurrent accesses from several CPUs}, they do \textbf{not provide protection against accesses from asynchronous functions} (interrupt handlers and deferrable functions like tasklet and softirqs). \textbf{Therefore per-CPU variables are prone to race conditions caused by kernel pre-emption, both in uniprocessor and multiprocessor systems}. \textbf{As a general rule, a kernel control path should access a per-CPU variable with kernel preemption disabled.}. We have some API:
-
-\begin{description}
-\item[\texttt{get\_cpu\_var(name)}] Disables kernel preemption, then selects the local CPU’s element of the per-CPU array name
-\item[\texttt{put\_cpu\_var(name)}] Enables kernel preemption.
-\end{description}
 
 
 \subsection{TCB}
 
 In Linux, the process descriptor is represented by a \texttt{task\_struct} structures (defined in \texttt{include/linux/sched.h}) which have many fields including:
+
 \begin{description}
 \item[\texttt{volatile long state}] Process state.
 \item[\texttt{struct mm\_struct *mm}] Pointer to memory are descriptor.
@@ -771,15 +753,91 @@ union thread_union {
 \end{lstlisting}
 
 
+\subsection{Preemption}
+
+As a general definition a kernel is \textit{preemptive} \textbf{if a process switch may occur while the replaced process is executing a kernel function, that is, while it runs in Kernel Mode}. 
+
+\textbf{Kernel pre-emption is disabled when the \texttt{preempt\_count} field in the \texttt{thread\_info} descriptor referenced by the \texttt{current\_thread\_info()} macro \textbf{is greater than zero}}. Linux provides several APIs to manage kernel pre-emption:
+\begin{description}
+\item[\texttt{preempt\_count()}] Return the \texttt{preempt\_count} field in the \texttt{thread\_info} descriptor.
+\item[\texttt{preempt\_disable()}] Increases by one the value of the preemption counter.
+\item[\texttt{preempt\_enable\_no\_resched()}] Decreases by one the value of the preemption counter.
+\item[\texttt{preempt\_enable()}] Decreases by one the value of the preemption counter, and invokes \texttt{preempt\_schedule()} if the \texttt{TIF\_NEED\_RESCHED} flag in the \texttt{thread\_info} descriptor is set
+\end{description}
+
+But there are other two very important API and they are related to \textbf{per-CPU variables}. 
+
+Remember that a \textbf{\textit{per-CPU variables} is an array of data structures, one element per each CPU in the system}. A CPU should not access the elements of the array corresponding to the other CPUs; on the other hand, it can freely read and modify its own element without fear of race conditions, because it is the only CPU entitled to do so. \textbf{While per-CPU variables provide protection against concurrent accesses from several CPUs}, they do \textbf{not provide protection against accesses from asynchronous functions} (interrupt handlers and deferrable functions like tasklet and softirqs). \textbf{Therefore per-CPU variables are prone to race conditions caused by kernel pre-emption, both in uniprocessor and multiprocessor systems}. \textbf{As a general rule, a kernel control path should access a per-CPU variable with kernel preemption disabled.}. We have some API:
+
+\begin{description}
+\item[\texttt{get\_cpu\_var(name)}] Disables kernel preemption, then selects the local CPU’s element of the per-CPU array name
+\item[\texttt{put\_cpu\_var(name)}] Enables kernel preemption.
+\end{description}
+
+\subsubsection{Process schedule}
+
+\textbf{Linux processes are preemptable} and therefore, when a process enters in the \texttt{TASK\_RUNNING} state, \textbf{the kernel checks whether its \textit{dynamic priority} is greater than the priority of the currently running process}. If it is, the execution of current process is interrupted and the scheduler is invoked to select another process to run. \textbf{A process also may be pre-empted when its time quantum expires}, that is when the \texttt{TIF\_NEED\_RESCHED} flag in the \texttt{thread\_info} structure of the current process is set, so the scheduler is invoked when the timer interrupt handler terminates.
+
+\textbf{The scheduler always succeeds in finding a process to be executed}; in fact, there is always at least one runnable process, that is the process 0, also known as \textit{swapper} or \textit{idle process} (\textbf{every CPU of a multiprocessor system has its own swapper process with PID equal to 0}).
+
+Every Linux process is always scheduled according to one of the following scheduling classes:
+
+\begin{description}
+\item[\texttt{SCHED\_FIFO}] A First-In, First-Out
+\item[\texttt{SCHED\_RR}] A Round Robin.
+\item[\texttt{SCHED\_NORMAL}] Time-shared.
+\end{description}
+
+\subsubsection{Process Priority}
+
+Every conventional (\textit{non-real-time}) process has its own \textbf{static priority} which is used to determine the \textit{base time quantum} of a process, which is computed so that an higher static priority corresponds to a longer base time quantum.
+
+The static priority is represented by a number ranging from 100 (highest priority) to 139 (lowest priority). A new process always inherits the static priority of its parent, although an user can change the static priority of the processes that he owns using \texttt{nice()} or \texttt{setpriority()} system call.
+
+However every conventional process also has a \textbf{dynamic priority}, which is a value ranging from 100 (highest priority) to 139 (lowest priority). \textbf{The dynamic priority is the number actually looked up by the scheduler when selecting the new process to run: a thread that calls the schedule function can be pre-empted by one that has higher dynamic priority}.
+
+\textit{It is related to static priority in term of reward or penalty depending on whether the thread is interactive or not.}
+
+Generally a thread is considered interactive if its sleep time is very high; technically a process having highest static priority (100) is considered interactive when its average sleep time exceeds 200 ms. 
+
+Obliviously all static and dynamic priority values of a process is stored into its TCB.
+
+\subsubsection{Data structures used by the scheduler}
+
+The \texttt{runqueue} data structure is the most important data structure of the Linux 2.6 scheduler. It links the process descriptors of all
+runnable processes, that is of those in a \texttt{TASK\_RUNNING} state. \textbf{Each CPU in the system has its own \texttt{runqueue} and all \texttt{runqueue} structures are stored in the \texttt{runqueues} per-CPU variable}. \textit{However a CPU-core can access to the runqueue of another one for load balancing purposes}
+
+The most important fields of the \texttt{runqueue} data structure are those related to the lists of runnable processes. They are:
+
+\begin{center}
+\begin{tabular}{l|l|p{13cm}} 
+
+\toprule
+Type & Field & Description \\
+\midrule
+
+\texttt{prio\_array\_t *} & \texttt{active} & Pointer to the lists of active processes. Technically it points to one of the two \texttt{prio\_array\_t} data structures in \texttt{arrays}
+
+\\
+\texttt{prio\_array\_t *} & \texttt{expired} & Pointer to the lists of expired processes. Technically it points to one of the two \texttt{prio\_array\_t} data structures in \texttt{arrays}
 
 
+\\
+\texttt{prio\_array\_t [2]} & \texttt{arrays} & The two sets of active and expired processes.
 
 
+\\
+\bottomrule
+\end{tabular}
+\end{center}
 
+\textbf{Every runnable process in the system belongs to one, and just one, runqueue.} As long as a runnable process remains in the same runqueue, it can be executed only by the CPU owning that runqueue. \textbf{Remember that runnable processes may migrate from one runqueue to another.} \textit{As you see, there is no mix of runnable and non-runnable tasks on a runqueue.}
 
+As you can see, the \texttt{arrays} field of the \texttt{runqueue} is an array consisting of two \texttt{prio\_array\_t} structures. \textbf{Each data structure represents a set of runnable processes, and includes 140 doubly linked list heads (one list for each possible process priority), a priority bitmap, and a counter of the processes included in the set}. \textit{Remember that 40 levels (say [100-139]) map to classical Unix time-sharing, while 100 levels (say [0-99]) map to Unix real-time scheduler extensions}.
 
+\textit{Periodically, the role of the two data structures in arrays changes: the active processes suddenly become the expired processes, and the expired processes become the active ones. We switch the queues upon a new epoch.}
 
-
+When a process creates a child, \textbf{the number of ticks left to the parent is split in two halves}: one for the parent and one for the child. \textit{This is done to prevent users from getting an unlimited amount of CPU time under certain condition.}
 
 
 
