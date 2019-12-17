@@ -10,6 +10,7 @@
 \usepackage{bookmark}
 \usepackage{listings}
 \usepackage{xcolor}
+\usepackage{soul}
 
 \lstset{
 language=C,
@@ -293,7 +294,19 @@ A \textbf{control registers} are a set of registers which changes or controls th
 \item[CR3] Used when virtual addressing is enabled, hence when the PG bit is set in CR0. CR3 holds a pointer to the \textit{page directory} for the current task
 \end{description}
 
-\subsection{Management of interrupts}
+\subsection{Interrupts}
+
+\begin{itemize}
+
+\item An \textbf{interrupt} represents an \textbf{asynchronous event}, \textit{not related to the current CPU execution flaw}, that needs to be immediately managed by system. \textit{Interrupts can be hardware or software}. Under Linux, hardware interrupts are called \textbf{IRQ}'s (\textit{Interrupt Requests})
+
+\item A \textbf{trap} (or \textbf{exceptions}) represents an \textbf{synchronous event} trap related to the current CPU execution flaw. 
+
+\end{itemize}
+
+\textbf{Each interrupt or exception is identified by a 8-bit unsigned number ranging from 0 to 255, which Intel calls \textit{vector}.}
+
+\subsubsection{IDT}
 
 Linux keeps a system table called \textbf{Interrupt Descriptor Table} (\textbf{IDT}) to \textbf{associate to each interrupt or exception vector with the address of the corresponding handler}. 
 
@@ -338,7 +351,31 @@ The following architecture-dependent functions (defined in \texttt{arch/i386/ker
 
 
 
-\subsubsection{System calls}
+\subsection{System calls}
+
+A \textbf{system call} represents a mechanism according to which an user mode process can requests service from the kernel of the operating system.
+
+\textbf{When a User Mode process invokes a system call, the CPU switches to Kernel Mode and starts the execution of a kernel function.}
+
+User mode processes can invoke a system call in two different ways:
+\begin{itemize}
+
+\item By executing the \texttt{int \$0x80} assembly language instruction.
+\item By executing the \texttt{sysenter} assembly language instruction, introduced in the Intel Pentium II microprocessors.
+
+\end{itemize}
+
+Similarly, the kernel can exit from a system call, switching the CPU back to User Mode, in two ways:
+\begin{itemize}
+
+\item By executing the \texttt{iret} assembly language instruction.
+\item By executing the \texttt{sysexit} assembly language instruction, introduced in the Intel Pentium II microprocessors.
+
+\end{itemize}
+
+Kernel level access is controlled via specific “entry points” (the GATEs),
+
+
 
 Linux System Call Table
 
@@ -613,9 +650,19 @@ Kernel-page mapping has a \textit{global} nature, therefore when we use \texttt{
 \newpage
 \section{Slide \textit{'kernel-level-task-management'}}
 
+
+
+
+
+
+
+
+
 \subsection{Interrupt handling}
 
-Under Linux, hardware interrupts are called \textbf{IRQ}'s (\textit{Interrupt Requests}) and their management  typically occurs via a \textbf{two-level logic}:
+
+
+IRQ's management typically occurs via a \textbf{two-level logic}:
 \begin{description}
 \item[Top Half] A routine that actually responds to the interrupt and do a minimal amount of work to schedule its bottom half (this operation is very fast).
 \item[Bottom Half] A routine scheduled by top half which execute whatever other work is required to handle the interrupt (such as awakening processes, starting up another I/O operation, and so on)
