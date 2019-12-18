@@ -1471,5 +1471,10 @@ ers and devices.
 
 \end{itemize}
 
+\section{Trivia}
+
+\begin{itemize}
+\item \texttt{\_\_init}, \texttt{\_\_initdata}, \texttt{\_\_initconst}	are used to mark some functions or initialized data	(doesn't apply to uninitialized data) as `\textit{initialization}' functions. \textbf{The kernel can take this as hint that the function is used only during the initialization phase and free up used memory resources after.} They are defined into \texttt{include/linux/init.h}.
+\end{itemize}
 
 \end{document}
