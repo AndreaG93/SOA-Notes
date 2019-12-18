@@ -11,6 +11,9 @@
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{soul}
+\usepackage{quoting}
+
+\quotingsetup{font=small}
 
 \lstset{
 language=C,
@@ -306,6 +309,11 @@ A \textbf{control registers} are a set of registers which changes or controls th
 
 \textbf{Each interrupt or exception is identified by a 8-bit unsigned number ranging from 0 to 255, which Intel calls \textit{vector}.}
 
+When a CPU receives an interrupt, it starts executing the code at the address found in the corresponding gate of the IDT.
+
+\texttt{SAVE\_ALL} saves all the CPU registers that may be used by the interrupt handler on the
+stack, except for \texttt{eflags}, \texttt{cs}, \texttt{eip}, \texttt{ss}, and \texttt{esp}, which are already saved automatically by the control unit. The macro then loads the selector of the user data segment into \texttt{ds} and \texttt{es}.
+
 \subsubsection{IDT}
 
 Linux keeps a system table called \textbf{Interrupt Descriptor Table} (\textbf{IDT}) to \textbf{associate to each interrupt or exception vector with the address of the corresponding handler}. 
@@ -360,7 +368,7 @@ A \textbf{system call} represents a mechanism according to which an user mode pr
 User mode processes can invoke a system call in two different ways:
 \begin{itemize}
 
-\item By executing the \texttt{int \$0x80} assembly language instruction.
+\item By executing the \texttt{int \$0x80} assembly language instruction. (for Windows system you can use the \texttt{int 0x2E} for Windows)
 \item By executing the \texttt{sysenter} assembly language instruction, introduced in the Intel Pentium II microprocessors.
 
 \end{itemize}
@@ -373,13 +381,41 @@ Similarly, the kernel can exit from a system call, switching the CPU back to Use
 
 \end{itemize}
 
-Kernel level access is controlled via specific “entry points” (the GATEs),
+\subsubsection{Traditional way: \texttt{int \$0x80}}
 
+The \textbf{vector 128} (in hexadecimal, \texttt{0x80}) is associated with the \textbf{unique} kernel entry point: in fact, \textbf{all the other gates aren't usable for on-demand access to the kernel} \textit{because they are reserved for the management of run-time errors and interrupts.}
 
+\begin{quoting}
+Recall that the \texttt{trap\_init()} function, invoked during kernel initialization, sets up the \textit{Interrupt Descriptor Table} entry corresponding to vector 128 as follows:
+\begin{lstlisting}
+set_system_gate(0x80, &system_call);
+\end{lstlisting}
+\end{quoting}
 
-Linux System Call Table
+The call loads the following values into the gate descriptor fields:
 
-The following table lists the system calls for the Linux 2.2 kernel. It could also be thought of as an API for the interface between user space and kernel space. My motivation for making this table was to make programming in assembly language easier when using only system calls and not the C library (for more information on this topic, go to http://www.linuxassembly.org). On the left are the numbers of the system calls. This number will be put in register %eax. On the right of the table are the types of values to be put into the remaining registers before calling the software interrupt 'int 0x80'. After each syscall, an integer is returned in %eax. 
+\begin{center}
+\begin{tabular}{l|p{13cm}} 
+
+\toprule
+Gate Field & Content \\
+\midrule
+\textbf{Segment Selector} & The \texttt{\_\_KERNEL\_CS} Segment Selector of the kernel code segment. \textit{Observe that one memory access to the GDT is required to retrieve it}.
+
+\\
+\textbf{Offset} & The pointer to the \texttt{system\_call()} system call handler.
+
+\\
+\textbf{Type} & Set to 15. Indicates that the exception is a Trap.
+
+\\
+\textbf{DPL (Descriptor Privilege Level)} & Set to 3. This allows processes in User Mode to invoke the exception handler
+
+\\
+ 
+\bottomrule
+\end{tabular}
+\end{center}
 
 
 
