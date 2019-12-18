@@ -199,7 +199,37 @@ Intel microprocessors perform address translation in \textbf{three} different wa
 \item[Long Mode] Identical to protected mode but the offset is hold by 64-bit general registers (\textit{although up to 48-bit are used in canonical form}). In this way is possible to address up to $2^{48}$ B (256 TB) of linear memory.
 \end{description}
 
-\textbf{From now we describe protected mode}. To make it easy to retrieve segment selectors quickly, the processor provides \textbf{segmentation registers} whose only purpose is to hold segment selectors; these registers are called \texttt{cs} (\textbf{code segment register, which points to a segment containing program instructions}), \texttt{ss} (\textbf{stack segment register, which points to a segment containing the current program stack}), \texttt{ds} (\textbf{data segment register, which points to a segment containing global and static data}), \texttt{es}, \texttt{fs}, and \texttt{gs} (\textbf{these three segmentation registers are general purpose and may refer to arbitrary data segments}.)
+\textbf{From now we describe protected mode}. To make it easy to retrieve segment selectors quickly, the processor provides \textbf{segmentation registers} whose only purpose is to hold segment selectors; these registers are called:
+
+\begin{center}
+\begin{tabular}{l|l|p{13cm}} 
+
+\toprule
+Register Label & Register Name & Description \\
+\midrule
+
+\texttt{cs} & \textit{\textbf{C}ode \textbf{S}egment Register} & Points to a segment containing program instructions.
+
+\\
+\texttt{ss} & \textit{\textbf{S}tack \textbf{S}egment Register} & Points to a segment containing the current program stack.
+
+\\
+\texttt{ds} & \textit{\textbf{D}ata \textbf{S}egment Register} & Points to a segment containing global and static data.
+
+\\
+\texttt{es} & \textit{\textbf{E}xtra \textbf{S}egment Register} & General purpose register and may refer to arbitrary data segments.
+
+\\
+\texttt{fs} & (\textit{'F' comes after 'E'}) & General purpose register and may refer to arbitrary data segments.
+
+\\
+\texttt{gs} & (\textit{'G' comes after 'F'}) & General purpose register and may refer to arbitrary data segments.
+
+\\
+\bottomrule
+\end{tabular}
+\end{center}
+
 
 To be more precise, segment selectors have three fields:
 \begin{description}
@@ -1475,6 +1505,10 @@ ers and devices.
 
 \begin{itemize}
 \item \texttt{\_\_init}, \texttt{\_\_initdata}, \texttt{\_\_initconst}	are used to mark some functions or initialized data	(doesn't apply to uninitialized data) as `\textit{initialization}' functions. \textbf{The kernel can take this as hint that the function is used only during the initialization phase and free up used memory resources after.} They are defined into \texttt{include/linux/init.h}.
+
+\item The \texttt{EFLAGS} register is the status register in Intel x86 microprocessors that contains the current state of the processor. This register is 32 bits wide. One of the most important bit 9 which is \texttt{IF} (\textit{Interrupt enable flag}) 
+
+\item The \texttt{EIP} register contains the address of the next instruction to be executed if no branching is done. 
 \end{itemize}
 
 \end{document}
